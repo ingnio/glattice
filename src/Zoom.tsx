@@ -890,6 +890,14 @@ export default function Zoom({
           {toolBtn("text", <IconText size={18} />, "Text")}
           {toolBtn("blur", <IconBlur size={18} />, "Blur region")}
           {toolBtn("simplify", <IconSimplify size={18} />, "Simplify content")}
+          <button
+            type="button"
+            className={`editor-tool ${spotlight.enabled ? "is-active" : ""}`}
+            title="Spotlight — dim outside cursor"
+            onClick={() => onSpotlightChange({ enabled: !spotlight.enabled })}
+          >
+            <IconSpotlight size={18} active={spotlight.enabled} />
+          </button>
         </div>
 
         <div className="editor-bar__group" style={{ marginLeft: "auto" }}>
@@ -911,15 +919,6 @@ export default function Zoom({
           </button>
           <button type="button" className="icon-btn" onClick={handleApplyToAll} disabled={frameEdits.length === 0} title="Apply to all frames">
             <IconCopyAll size={18} />
-          </button>
-          <span className="zoom__bar__sep" />
-          <button
-            type="button"
-            className={`icon-btn ${spotlight.enabled ? "icon-btn--active" : ""}`}
-            onClick={() => onSpotlightChange({ enabled: !spotlight.enabled })}
-            title="Spotlight — dim outside cursor"
-          >
-            <IconSpotlight size={18} active={spotlight.enabled} />
           </button>
           <span className="zoom__bar__sep" />
           <button
