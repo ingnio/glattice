@@ -3,7 +3,7 @@ import { convertFileSrc, FrameThumb, InputEvent } from "./lib/tauri";
 import { FrameEdits, getFrameEdits } from "./lib/edits";
 import { drawAnnotation, drawClicks, drawCursor, drawKeys, drawSpotlight, paintEdit } from "./lib/paintEdits";
 import { AnnotationPos, SheetDraft, SpotlightDraft } from "./lib/prefs";
-import { IconBack, IconEye, IconPlus, IconTrash, IconX } from "./icons";
+import { IconBack, IconEye, IconMore, IconPlus, IconTrash } from "./icons";
 
 interface Props {
   thumbs: FrameThumb[];
@@ -47,6 +47,8 @@ export default function Grid({
   const [selectedSet, setSelectedSet] = useState<Set<number>>(new Set());
   const lastClickedPosRef = useRef<number | null>(null);
   const [restoreOpen, setRestoreOpen] = useState(false);
+  // Original index of the frame whose kebab menu is currently open.
+  const [menuOpenIdx, setMenuOpenIdx] = useState<number | null>(null);
 
   const handleFrameClick = useCallback(
     (pos: number, originalIdx: number, e: React.MouseEvent) => {
@@ -428,14 +430,36 @@ export default function Grid({
                   <button
                     type="button"
                     className="icon-btn icon-btn--xs"
-                    title="Delete frame"
+                    title="Frame options"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onDelete([t.index]);
+                      setMenuOpenIdx((prev) => (prev === t.index ? null : t.index));
                     }}
                   >
-                    <IconX size={14} />
+                    <IconMore size={14} />
                   </button>
+                  {menuOpenIdx === t.index && (
+                    <>
+                      <div
+                        className="grid-frame__menu-scrim"
+                        onClick={(e) => { e.stopPropagation(); setMenuOpenIdx(null); }}
+                      />
+                      <div className="grid-frame__menu" role="menu">
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="grid-frame__menu-item grid-frame__menu-item--danger"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDelete([t.index]);
+                            setMenuOpenIdx(null);
+                          }}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             </div>

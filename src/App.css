@@ -2344,8 +2344,52 @@ body {
 }
 
 .grid-frame__actions {
+  position: relative;
   display: flex;
   gap: 2px;
+}
+
+.grid-frame__menu-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+}
+
+.grid-frame__menu {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  right: 0;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  min-width: 100px;
+  z-index: 100;
+  overflow: hidden;
+}
+
+.grid-frame__menu-item {
+  display: block;
+  width: 100%;
+  padding: 7px 12px;
+  font-size: 12px;
+  text-align: left;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.grid-frame__menu-item:hover {
+  background: var(--color-accent-dim, rgba(110, 168, 255, 0.1));
+}
+
+.grid-frame__menu-item--danger {
+  color: var(--danger, #ef4444);
+}
+
+.grid-frame__menu-item--danger:hover {
+  background: rgba(239, 68, 68, 0.08);
 }
 
 .grid-frame__footer {
