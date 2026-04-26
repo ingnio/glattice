@@ -439,13 +439,20 @@ export function paintEdit(
     }
     case "blur": {
       if (e.w < 1 || e.h < 1) break;
+      // Snapshot the composited canvas so blur operates on all previously
+      // rendered content (image edits, shapes, etc.) — not just the raw
+      // source frame. Mirrors the Rust compositor which edits in-place.
+      const snap = document.createElement("canvas");
+      snap.width = ctx.canvas.width;
+      snap.height = ctx.canvas.height;
+      snap.getContext("2d")!.drawImage(ctx.canvas, 0, 0);
       ctx.save();
       ctx.beginPath();
       ctx.rect(e.x, e.y, e.w, e.h);
       ctx.clip();
       ctx.filter = `blur(${Math.max(2, e.radius)}px)`;
       ctx.drawImage(
-        img,
+        snap,
         Math.max(0, e.x - e.radius),
         Math.max(0, e.y - e.radius),
         e.w + e.radius * 2,
@@ -470,7 +477,13 @@ export function paintEdit(
     }
     case "simplify": {
       if (e.w < 1 || e.h < 1) break;
-      const bands = detectTextBands(img, e.x, e.y, e.w, e.h, {
+      // Snapshot the composited canvas so simplify reads previously rendered
+      // content (image edits, shapes, etc.) — not just the raw source frame.
+      const snap = document.createElement("canvas");
+      snap.width = ctx.canvas.width;
+      snap.height = ctx.canvas.height;
+      snap.getContext("2d")!.drawImage(ctx.canvas, 0, 0);
+      const bands = detectTextBands(snap, e.x, e.y, e.w, e.h, {
         blockSize: e.blockSize,
         threshold: e.threshold,
         merge: e.merge,
