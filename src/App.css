@@ -2404,30 +2404,34 @@ body {
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
-  min-width: 140px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  min-width: 180px;
   z-index: 201;
   overflow: hidden;
-  padding: 4px 0;
+  padding: 5px 4px;
 }
 
 .context-menu__label {
-  padding: 4px 12px 3px;
+  padding: 5px 10px 4px;
   font-size: 11px;
+  color: var(--text-dim);
   border-bottom: 1px solid var(--border);
-  margin-bottom: 2px;
+  margin-bottom: 3px;
 }
 
 .context-menu__item {
-  display: block;
+  display: flex;
+  align-items: center;
   width: 100%;
-  padding: 7px 12px;
+  padding: 9px 12px;
   font-size: 13px;
   text-align: left;
   background: none;
   border: none;
+  border-radius: calc(var(--radius) - 2px);
   cursor: pointer;
   color: var(--text);
+  gap: 0;
 }
 
 .context-menu__item:hover {
@@ -2444,9 +2448,12 @@ body {
 
 .context-menu__icon {
   display: inline-flex;
-  vertical-align: middle;
-  margin-right: 7px;
-  opacity: 0.8;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  flex-shrink: 0;
+  margin-right: 8px;
+  opacity: 0.75;
 }
 
 /* ——— Frame Properties modal ——— */
