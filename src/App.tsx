@@ -815,6 +815,7 @@ export default function App() {
           }}
           onInsertBlank={handleInsertBlankFrame}
           onPreview={() => setShowPreviewModal(true)}
+          onBack={() => setView("player")}
           compactNavButton={compactNavButton}
         />
       )}

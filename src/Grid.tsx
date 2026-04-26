@@ -3,7 +3,7 @@ import { convertFileSrc, FrameThumb, InputEvent } from "./lib/tauri";
 import { FrameEdits, getFrameEdits } from "./lib/edits";
 import { drawAnnotation, drawClicks, drawCursor, drawKeys, drawSpotlight, paintEdit } from "./lib/paintEdits";
 import { AnnotationPos, SheetDraft, SpotlightDraft } from "./lib/prefs";
-import { IconEye, IconPlus, IconTrash, IconX } from "./icons";
+import { IconBack, IconEye, IconPlus, IconTrash, IconX } from "./icons";
 
 interface Props {
   thumbs: FrameThumb[];
@@ -21,6 +21,7 @@ interface Props {
   onDelete: (indices: number[]) => void;
   onInsertBlank: () => void;
   onPreview: () => void;
+  onBack: () => void;
   compactNavButton?: React.ReactNode;
 }
 
@@ -39,6 +40,7 @@ export default function Grid({
   onDelete,
   onInsertBlank,
   onPreview,
+  onBack,
   compactNavButton,
 }: Props) {
   // ——— selection ———
@@ -134,6 +136,9 @@ export default function Grid({
     <div className="grid-view">
       {/* ——— Chrome ——— */}
       <div className="grid-view__chrome">
+        <button type="button" className="icon-btn" onClick={onBack} title="Back to player">
+          <IconBack size={18} />
+        </button>
         <div className="grid-view__title">
           Frames{" "}
           <span className="muted">
