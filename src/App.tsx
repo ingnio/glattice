@@ -876,6 +876,7 @@ export default function App() {
           edits={edits}
           inputEvents={inputEvents}
           saving={savingSheet}
+          spotlight={prefs.spotlight}
           onToggle={toggleFrame}
           compactNavButton={compactNavButton}
           onZoom={(i) => {
@@ -883,9 +884,10 @@ export default function App() {
             setView("zoom");
           }}
           onReorder={setFrameOrder}
-          onDelete={(originalIdx) =>
-            setFrameOrder((o) => o.filter((i) => i !== originalIdx))
-          }
+          onDelete={(indices) => {
+            const toRemove = new Set(indices);
+            setFrameOrder((o) => o.filter((i) => !toRemove.has(i)));
+          }}
           onSelectAll={includeAll}
           onDeselectAll={excludeAll}
           onSaveSheet={handleQuickSaveSheet}

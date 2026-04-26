@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { convertFileSrc, FrameThumb, InputEvent } from "./lib/tauri";
 import { FrameEdits, getFrameEdits } from "./lib/edits";
-import { drawClicks, drawCursor, drawKeys, paintEdit } from "./lib/paintEdits";
+import { drawClicks, drawCursor, drawKeys, drawSpotlight, paintEdit } from "./lib/paintEdits";
+import { SpotlightDraft } from "./lib/prefs";
 import {
   IconCheckAll,
   IconCheckboxChecked,
@@ -14,21 +15,20 @@ import {
 interface Props {
   thumbs: FrameThumb[];
   excluded: Set<number>;
-  /** Per-frame vector edits, keyed by frame index. Painted on top of
-   *  each thumbnail so the grid matches what the player and exports
-   *  produce. */
+  /** Per-frame vector edits. Painted on each thumbnail so the grid
+   *  matches what the player and exports produce. */
   edits: FrameEdits;
-  /** Click + key events captured during the recording. Drawn as
-   *  cursor rings / recent-keys overlays on each thumbnail at the
-   *  thumb's elapsed time. */
+  /** Click + key events captured during recording. */
   inputEvents: InputEvent[];
+  /** Spotlight vignette — applied on each thumbnail when enabled. */
+  spotlight: SpotlightDraft;
   saving: boolean;
   onToggle: (index: number) => void;
   onZoom: (index: number) => void;
   /** Emit new frameOrder (array of original indices in display order). */
   onReorder: (newOrder: number[]) => void;
-  /** Permanently remove a frame from the display order and all exports. */
-  onDelete: (originalIdx: number) => void;
+  /** Permanently remove frames from the display order and all exports. */
+  onDelete: (indices: number[]) => void;
   onSelectAll: () => void;
   onDeselectAll: () => void;
   onSaveSheet: () => void;
@@ -40,6 +40,7 @@ export default function Grid({
   excluded,
   edits,
   inputEvents,
+  spotlight,
   saving,
   onToggle,
   onZoom,
@@ -52,6 +53,52 @@ export default function Grid({
 }: Props) {
   const includedCount = thumbs.length - excluded.size;
 
+  // ——— selection state ———
+  // selectedSet holds original frame indices (not positions). Positions
+  // shift on reorder; indices are stable identifiers.
+  const [selectedSet, setSelectedSet] = useState<Set<number>>(new Set());
+  // Last-clicked position (not index) so shift-click range anchors correctly
+  // after drag-reorders that change positions.
+  const lastClickedPosRef = useRef<number | null>(null);
+
+  const handleFrameClick = useCallback(
+    (pos: number, originalIdx: number, e: React.MouseEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        setSelectedSet((prev) => {
+          const next = new Set(prev);
+          if (next.has(originalIdx)) next.delete(originalIdx);
+          else next.add(originalIdx);
+          return next;
+        });
+        lastClickedPosRef.current = pos;
+      } else if (e.shiftKey && lastClickedPosRef.current !== null) {
+        const lo = Math.min(lastClickedPosRef.current, pos);
+        const hi = Math.max(lastClickedPosRef.current, pos);
+        setSelectedSet(new Set(thumbs.slice(lo, hi + 1).map((t) => t.index)));
+        // anchor stays at lastClickedPosRef for further shift-clicks
+      } else {
+        setSelectedSet(new Set([originalIdx]));
+        lastClickedPosRef.current = pos;
+      }
+    },
+    [thumbs],
+  );
+
+  // Delete / Backspace removes all selected frames.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Delete" && e.key !== "Backspace") return;
+      if (selectedSet.size === 0) return;
+      const target = e.target as HTMLElement;
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
+      onDelete([...selectedSet]);
+      setSelectedSet(new Set());
+      lastClickedPosRef.current = null;
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selectedSet, onDelete]);
+
   // ——— pointer-based reorder ———
   // HTML5 DnD is intercepted by WebView2's native file-drop handler when
   // dragDropEnabled=true (needed for GIF drop into Home). Pointer events
@@ -59,17 +106,23 @@ export default function Grid({
   const gridRef = useRef<HTMLDivElement | null>(null);
   const dragSrcRef = useRef<number | null>(null);
   const startPtRef = useRef<{ x: number; y: number } | null>(null);
+  // Set to true once the pointer moves past the drag deadzone so the
+  // onClick handler can distinguish a drag-release from a plain click.
+  const didDragRef = useRef(false);
   const [dragSrcPos, setDragSrcPos] = useState<number | null>(null);
   const [dropPos, setDropPos] = useState<number | null>(null);
 
-  const commitReorder = useCallback((src: number, dst: number) => {
-    if (src === dst) return;
-    const order = thumbs.map((t) => t.index);
-    const [moved] = order.splice(src, 1);
-    const insertAt = src < dst ? dst - 1 : dst;
-    order.splice(insertAt, 0, moved);
-    onReorder(order);
-  }, [thumbs, onReorder]);
+  const commitReorder = useCallback(
+    (src: number, dst: number) => {
+      if (src === dst) return;
+      const order = thumbs.map((t) => t.index);
+      const [moved] = order.splice(src, 1);
+      const insertAt = src < dst ? dst - 1 : dst;
+      order.splice(insertAt, 0, moved);
+      onReorder(order);
+    },
+    [thumbs, onReorder],
+  );
 
   const clearDrag = useCallback(() => {
     dragSrcRef.current = null;
@@ -78,23 +131,26 @@ export default function Grid({
     setDropPos(null);
   }, []);
 
-  // Return the insertion index (0 … n) based on which half of the hovered
-  // card the pointer is over. Left half → insert before, right half → insert
-  // after. This lets the user drop after the last card by hovering its right
-  // half, giving an insertion index of thumbs.length.
-  const insertionIdxAt = useCallback((clientX: number, clientY: number): number | null => {
-    const grid = gridRef.current;
-    if (!grid) return null;
-    const cards = grid.querySelectorAll<HTMLElement>(".grid-frame");
-    for (let i = 0; i < cards.length; i++) {
-      const r = cards[i].getBoundingClientRect();
-      if (clientX >= r.left && clientX < r.right &&
-          clientY >= r.top && clientY < r.bottom) {
-        return clientX < r.left + r.width / 2 ? i : i + 1;
+  const insertionIdxAt = useCallback(
+    (clientX: number, clientY: number): number | null => {
+      const grid = gridRef.current;
+      if (!grid) return null;
+      const cards = grid.querySelectorAll<HTMLElement>(".grid-frame");
+      for (let i = 0; i < cards.length; i++) {
+        const r = cards[i].getBoundingClientRect();
+        if (
+          clientX >= r.left &&
+          clientX < r.right &&
+          clientY >= r.top &&
+          clientY < r.bottom
+        ) {
+          return clientX < r.left + r.width / 2 ? i : i + 1;
+        }
       }
-    }
-    return null;
-  }, []);
+      return null;
+    },
+    [],
+  );
 
   return (
     <div className="grid-view">
@@ -104,6 +160,9 @@ export default function Grid({
           <span className="muted">
             · {includedCount} / {thumbs.length}
           </span>
+          {selectedSet.size > 0 && (
+            <span className="muted"> · {selectedSet.size} selected</span>
+          )}
         </div>
         <div className="grid-view__tools">
           <button
@@ -143,8 +202,7 @@ export default function Grid({
           if (dragSrcRef.current === null || !startPtRef.current) return;
           const { x, y } = startPtRef.current;
           if (Math.hypot(e.clientX - x, e.clientY - y) < 6) return;
-          // Cross the deadzone: claim capture so the drag runs smoothly
-          // even when the pointer leaves the source card.
+          didDragRef.current = true;
           if (dragSrcPos === null) {
             (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
             setDragSrcPos(dragSrcRef.current);
@@ -163,40 +221,52 @@ export default function Grid({
       >
         {thumbs.map((t, pos) => {
           const isExcluded = excluded.has(t.index);
+          const isSelected = selectedSet.has(t.index);
           const isDragging = dragSrcPos === pos;
-          // Show a left-edge line when insertion point is before this card,
-          // or a right-edge line on the last card for the "append" case.
           const lineLeft = dropPos === pos && dragSrcPos !== pos;
-          const lineRight = pos === thumbs.length - 1 &&
-            dropPos === thumbs.length && dragSrcPos !== pos;
+          const lineRight =
+            pos === thumbs.length - 1 &&
+            dropPos === thumbs.length &&
+            dragSrcPos !== pos;
           return (
             <div
               key={t.index}
               className={[
                 "grid-frame",
                 isExcluded ? "grid-frame--excluded" : "",
+                isSelected ? "grid-frame--selected" : "",
                 isDragging ? "grid-frame--dragging" : "",
                 lineLeft ? "grid-frame--line-left" : "",
                 lineRight ? "grid-frame--line-right" : "",
-              ].filter(Boolean).join(" ")}
+              ]
+                .filter(Boolean)
+                .join(" ")}
               onPointerDown={(e) => {
                 if (e.button !== 0) return;
                 const target = e.target as HTMLElement;
                 if (target.closest(".grid-frame__actions")) return;
-                // Don't capture yet — wait until drag deadzone is crossed
-                // in onPointerMove so plain clicks still reach the canvas.
+                didDragRef.current = false;
                 dragSrcRef.current = pos;
                 startPtRef.current = { x: e.clientX, y: e.clientY };
               }}
-              onDoubleClick={() => {
-                if (dragSrcPos === null) onZoom(t.index);
+              onClick={(e) => {
+                if (didDragRef.current) return;
+                const target = e.target as HTMLElement;
+                if (target.closest(".grid-frame__actions")) return;
+                handleFrameClick(pos, t.index, e);
+              }}
+              onDoubleClick={(e) => {
+                if (didDragRef.current) return;
+                const target = e.target as HTMLElement;
+                if (target.closest(".grid-frame__actions")) return;
+                onZoom(t.index);
               }}
             >
               <FrameCanvas
                 thumb={t}
                 frameEdits={getFrameEdits(edits, t.index)}
                 inputEvents={inputEvents}
-                onClick={() => onZoom(t.index)}
+                spotlight={spotlight}
               />
               <div className="grid-frame__footer">
                 <span className="grid-frame__index">
@@ -225,7 +295,7 @@ export default function Grid({
                     title="Delete frame"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onDelete(t.index);
+                      onDelete([t.index]);
                     }}
                   >
                     <IconX size={14} />
@@ -244,19 +314,13 @@ interface FrameCanvasProps {
   thumb: FrameThumb;
   frameEdits: ReturnType<typeof getFrameEdits>;
   inputEvents: InputEvent[];
-  onClick: () => void;
+  spotlight: SpotlightDraft;
 }
 
-/** Per-thumbnail canvas: paints the source PNG, then layers per-frame
- *  edits + cursor + click rings + recent-keys on top — matches the
- *  Player and encodeVideo pipelines so the grid preview is a
- *  high-fidelity representation of what gets exported. */
-function FrameCanvas({
-  thumb,
-  frameEdits,
-  inputEvents,
-  onClick,
-}: FrameCanvasProps) {
+/** Per-thumbnail canvas: paints source PNG → frame edits → cursor →
+ *  click rings → keys → spotlight. Matches Player + encodeVideo pipelines
+ *  so the grid is a high-fidelity representation of what gets exported. */
+function FrameCanvas({ thumb, frameEdits, inputEvents, spotlight }: FrameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
@@ -280,33 +344,23 @@ function FrameCanvas({
       for (const e of frameEdits) paintEdit(ctx, img, e);
       if (thumb.cursor) drawCursor(ctx, thumb.cursor.x, thumb.cursor.y);
       if (inputEvents.length > 0) {
-        drawClicks(
-          ctx,
-          inputEvents,
-          thumb.elapsedMs,
-          canvas.width,
-          canvas.height,
-        );
-        drawKeys(
-          ctx,
-          inputEvents,
-          thumb.elapsedMs,
-          canvas.width,
-          canvas.height,
-        );
+        drawClicks(ctx, inputEvents, thumb.elapsedMs, canvas.width, canvas.height);
+        drawKeys(ctx, inputEvents, thumb.elapsedMs, canvas.width, canvas.height);
+      }
+      if (spotlight.enabled && thumb.cursor) {
+        drawSpotlight(ctx, thumb.cursor.x, thumb.cursor.y, spotlight.radius, spotlight.dimOpacity);
       }
     };
     img.src = convertFileSrc(thumb.path);
     return () => {
       cancelled = true;
     };
-  }, [thumb.path, thumb.elapsedMs, thumb.cursor, frameEdits, inputEvents]);
+  }, [thumb.path, thumb.elapsedMs, thumb.cursor, frameEdits, inputEvents, spotlight]);
 
   return (
     <canvas
       ref={canvasRef}
       className="grid-frame__canvas"
-      onClick={onClick}
       aria-label={`Frame ${thumb.index + 1}`}
     />
   );

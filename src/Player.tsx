@@ -509,7 +509,7 @@ export default function Player({
             onClick={() => onSpotlightChange({ enabled: !spotlight.enabled })}
             title="Spotlight mode — dim outside the cursor"
           >
-            <IconSpotlight size={18} />
+            <IconSpotlight size={18} active={spotlight.enabled} />
           </button>
           <div className="player__save">
             <button

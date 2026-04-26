@@ -2169,6 +2169,12 @@ body {
   filter: grayscale(1) contrast(0.8);
 }
 
+.grid-frame--selected {
+  outline: 2px solid var(--color-accent, #6ea8ff);
+  outline-offset: -2px;
+  border-color: var(--color-accent, #6ea8ff);
+}
+
 /* ——— zoom ———————————————————————————————————————————————— */
 
 .zoom {

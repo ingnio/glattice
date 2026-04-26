@@ -154,10 +154,10 @@ export const IconX = ({ size = defaults.size }: IconProps) =>
     </>,
   );
 
-export const IconSpotlight = ({ size = defaults.size }: IconProps) => (
+export const IconSpotlight = ({ size = defaults.size, active = false }: IconProps & { active?: boolean }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="4" fill="currentColor" stroke="none" />
-    <circle cx="12" cy="12" r="8.5" strokeOpacity="0.45" />
+    <circle cx="12" cy="12" r="4" fill={active ? "currentColor" : "none"} />
+    <circle cx="12" cy="12" r="8.5" strokeOpacity={active ? 1 : 0.4} />
   </svg>
 );
 
