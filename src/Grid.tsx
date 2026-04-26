@@ -50,6 +50,24 @@ export default function Grid({
   // Original index of the frame whose kebab menu is currently open.
   const [menuOpenIdx, setMenuOpenIdx] = useState<number | null>(null);
 
+  // Right-click context menu
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    frameIdx: number;
+  } | null>(null);
+
+  // Frames affected by a context menu action: all selected if the
+  // right-clicked frame is part of the selection, otherwise just that frame.
+  const contextTargets =
+    contextMenu === null
+      ? []
+      : selectedSet.size > 1 && selectedSet.has(contextMenu.frameIdx)
+        ? [...selectedSet]
+        : [contextMenu.frameIdx];
+
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
+
   const handleFrameClick = useCallback(
     (pos: number, originalIdx: number, e: React.MouseEvent) => {
       if (e.ctrlKey || e.metaKey) {
@@ -81,6 +99,7 @@ export default function Grid({
       onDelete([...selectedSet]);
       setSelectedSet(new Set());
       lastClickedPosRef.current = null;
+      setContextMenu(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -413,6 +432,11 @@ export default function Grid({
                 if (target.closest(".grid-frame__actions")) return;
                 onZoom(t.index);
               }}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setContextMenu({ x: e.clientX, y: e.clientY, frameIdx: t.index });
+              }}
             >
               <FrameCanvas
                 thumb={t}
@@ -467,6 +491,39 @@ export default function Grid({
         })}
       </div>
       </div>
+
+      {contextMenu !== null && (
+        <>
+          <div
+            className="context-menu__scrim"
+            onClick={closeContextMenu}
+            onContextMenu={(e) => { e.preventDefault(); closeContextMenu(); }}
+          />
+          <div
+            className="context-menu"
+            style={{ left: contextMenu.x, top: contextMenu.y }}
+            role="menu"
+          >
+            {contextTargets.length > 1 && (
+              <div className="context-menu__label muted">
+                {contextTargets.length} frames
+              </div>
+            )}
+            <button
+              type="button"
+              role="menuitem"
+              className="context-menu__item context-menu__item--danger"
+              onClick={() => {
+                onDelete(contextTargets);
+                if (contextTargets.length > 1) setSelectedSet(new Set());
+                closeContextMenu();
+              }}
+            >
+              Delete
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
