@@ -61,6 +61,11 @@ export interface SheetConfig {
   spotlight: { radius: number; dimOpacity: number } | null;
 }
 
+export interface InsertedFrame {
+  thumb: FrameThumb;
+  playerFrame: FrameThumb;
+}
+
 export interface SheetInfo {
   path: string;
   width: number;
@@ -168,6 +173,7 @@ export const api = {
   listVisibleWindows: (level: "low" | "medium" | "high") =>
     invoke<WindowRect[]>("list_visible_windows", { level }),
   takePendingFile: () => invoke<string | null>("take_pending_file"),
+  insertBlankFrame: () => invoke<InsertedFrame>("insert_blank_frame"),
   showRecordingIndicator: (r: RegionInput) =>
     invoke<void>("show_recording_indicator", {
       x: r.x,

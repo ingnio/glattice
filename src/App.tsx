@@ -19,6 +19,7 @@ import {
   RecordingInfo,
   RegionInput,
 } from "./lib/tauri";
+
 import { encodeVideo, VideoFormat } from "./lib/encodeVideo";
 import { FrameEdits } from "./lib/edits";
 import {
@@ -643,6 +644,17 @@ export default function App() {
     setEdits((e) => { const next = { ...e }; delete next[index]; return next; });
   }, []);
 
+  const handleInsertBlankFrame = useCallback(async () => {
+    try {
+      const result = await api.insertBlankFrame();
+      setThumbs((prev) => [...prev, result.thumb]);
+      setPlayerFrames((prev) => [...prev, result.playerFrame]);
+      setFrameOrder((prev) => [...prev, result.thumb.index]);
+    } catch (e) {
+      setError(String(e));
+    }
+  }, []);
+
   const handleClearRegion = useCallback(async () => {
     try {
       await api.clearRegion();
@@ -801,6 +813,7 @@ export default function App() {
             const toRemove = new Set(indices);
             setFrameOrder((o) => o.filter((i) => !toRemove.has(i)));
           }}
+          onInsertBlank={handleInsertBlankFrame}
           onPreview={() => setShowPreviewModal(true)}
           compactNavButton={compactNavButton}
         />

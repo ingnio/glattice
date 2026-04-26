@@ -26,7 +26,7 @@ use tauri::{
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 use crate::{
-    capture::{CaptureState, Region},
+    capture::{CapturedFrame, CaptureState, Region},
     error::{AppError, AppResult},
 };
 
@@ -138,7 +138,7 @@ struct RecordingInfo {
     audio_path: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct FrameThumb {
     index: u32,
@@ -1441,6 +1441,89 @@ fn take_pending_file(state: State<'_, AppState>) -> Option<String> {
     state.pending_file.lock().take()
 }
 
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InsertedFrame {
+    thumb: FrameThumb,
+    player_frame: FrameThumb,
+}
+
+/// Append a blank white frame to the current recording and write its
+/// thumbnail + player PNG to disk. Returns both file paths so the
+/// frontend can add the frame to state without a full reload (which
+/// would reset the user's drag-reorder).
+///
+/// The blank frame is always appended — its index never collides with
+/// existing frames, so `frameOrder` and `edits` stay valid.
+#[tauri::command]
+fn insert_blank_frame(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> AppResult<InsertedFrame> {
+    let source_id = (*state.current_source_id.lock()).ok_or(AppError::NoGifLoaded)?;
+
+    let (new_index, width, height, elapsed_ms) = {
+        let mut guard = state.imported_gif.lock();
+        let recording = guard.as_mut().ok_or(AppError::NoGifLoaded)?;
+        if recording.frames.is_empty() {
+            return Err(AppError::InvalidConfig(
+                "no frames to derive dimensions from".into(),
+            ));
+        }
+        let width = recording.frames[0].width;
+        let height = recording.frames[0].height;
+        let fps = recording.fps.max(1);
+        let last_elapsed = recording.frames.last().map(|f| f.elapsed_ms).unwrap_or(0);
+        let elapsed_ms = last_elapsed + 1000 / fps;
+        let new_index = recording.frames.len() as u32;
+
+        recording.frames.push(CapturedFrame {
+            width,
+            height,
+            rgba: vec![255u8; (width * height * 4) as usize],
+            elapsed_ms,
+            cursor: None,
+        });
+        (new_index, width, height, elapsed_ms)
+    };
+
+    let white = image::RgbaImage::from_pixel(width, height, image::Rgba([255, 255, 255, 255]));
+
+    // Full-resolution player frame.
+    let pdir = player_dir(&app, source_id)?;
+    let player_path = pdir.join(format!("{new_index:04}.png"));
+    white.save(&player_path)?;
+
+    // Scaled thumbnail (mirrors the constant in thumbs.rs).
+    const THUMB_MAX_W: u32 = 320;
+    let tdir = thumb_dir(&app, source_id)?;
+    let thumb_path = tdir.join(format!("{new_index:04}.png"));
+    if width > THUMB_MAX_W {
+        let scale = THUMB_MAX_W as f32 / width as f32;
+        let tw = THUMB_MAX_W;
+        let th = ((height as f32) * scale).round().max(1.0) as u32;
+        image::imageops::resize(&white, tw, th, image::imageops::FilterType::Lanczos3)
+            .save(&thumb_path)?;
+    } else {
+        white.save(&thumb_path)?;
+    }
+
+    Ok(InsertedFrame {
+        thumb: FrameThumb {
+            index: new_index,
+            path: thumb_path.to_string_lossy().into_owned(),
+            elapsed_ms,
+            cursor: None,
+        },
+        player_frame: FrameThumb {
+            index: new_index,
+            path: player_path.to_string_lossy().into_owned(),
+            elapsed_ms,
+            cursor: None,
+        },
+    })
+}
+
 /// Extract the first GIF path from a CLI arg list. The first element
 /// is usually the exe path, so skip it.
 fn find_gif_arg(args: &[String]) -> Option<String> {
@@ -1599,6 +1682,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            insert_blank_frame,
             platform_check,
             is_recording,
             start_recording,
