@@ -232,8 +232,8 @@ export default function SheetView({
             onClick={() => onChange({ bgTransparent: !sheet.bgTransparent })} title="Transparent background">
             Transparent
           </button>
-          <button type="button" className={`chip ${sheet.border ? "chip--active" : ""}`}
-            onClick={() => onChange({ border: !sheet.border })} title="Frame border">
+          <button type="button" className={`chip ${(sheet.borderWidth ?? 0) > 0 ? "chip--active" : ""}`}
+            onClick={() => onChange({ borderWidth: (sheet.borderWidth ?? 0) > 0 ? 0 : 1 })} title="Frame border">
             Border
           </button>
         </div>

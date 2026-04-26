@@ -31,9 +31,9 @@ pub struct SheetConfig {
     /// Background RGBA color.
     #[serde(default = "default_bg")]
     pub background: [u8; 4],
-    /// Optional 1px border drawn around each frame (uses border_color).
+    /// Border width in source pixels. 0 = no border.
     #[serde(default)]
-    pub border: bool,
+    pub border_width: u32,
     #[serde(default = "default_border_color")]
     pub border_color: [u8; 4],
     /// Output format: "png" | "jpeg" | "webp".
@@ -247,8 +247,8 @@ pub fn compose(recording: &Recording, config: &SheetConfig) -> AppResult<SheetOu
 
         imageops::overlay(&mut canvas, &sized, x as i64, y as i64);
 
-        if config.border {
-            draw_rect_border(&mut canvas, x, y, frame_w, frame_h, config.border_color);
+        if config.border_width > 0 {
+            draw_rect_border(&mut canvas, x, y, frame_w, frame_h, config.border_color, config.border_width);
         }
 
         if config.show_frame_number || config.show_timestamp {
@@ -332,33 +332,32 @@ fn apply_spotlight(img: &mut RgbaImage, cx: f32, cy: f32, radius: f32, dim_opaci
     }
 }
 
-fn draw_rect_border(img: &mut RgbaImage, x: u32, y: u32, w: u32, h: u32, color: [u8; 4]) {
-    let c = Rgba(color);
-    let (iw, ih) = img.dimensions();
-    if w == 0 || h == 0 {
+fn draw_rect_border(img: &mut RgbaImage, x: u32, y: u32, w: u32, h: u32, color: [u8; 4], width: u32) {
+    if w == 0 || h == 0 || width == 0 {
         return;
     }
-    for dx in 0..w {
-        let px = x + dx;
-        if px < iw {
-            if y < ih {
-                img.put_pixel(px, y, c);
-            }
-            let yb = y + h.saturating_sub(1);
-            if yb < ih {
-                img.put_pixel(px, yb, c);
+    let c = Rgba(color);
+    let (iw, ih) = img.dimensions();
+    let max_inset = (w / 2).min(h / 2);
+    for i in 0..width.min(max_inset) {
+        let bx = x + i;
+        let by = y + i;
+        let bw = w.saturating_sub(i * 2);
+        let bh = h.saturating_sub(i * 2);
+        if bw == 0 || bh == 0 { break; }
+        for dx in 0..bw {
+            if bx + dx < iw {
+                if by < ih { img.put_pixel(bx + dx, by, c); }
+                let yb = by + bh.saturating_sub(1);
+                if yb < ih && yb != by { img.put_pixel(bx + dx, yb, c); }
             }
         }
-    }
-    for dy in 0..h {
-        let py = y + dy;
-        if py < ih {
-            if x < iw {
-                img.put_pixel(x, py, c);
-            }
-            let xr = x + w.saturating_sub(1);
-            if xr < iw {
-                img.put_pixel(xr, py, c);
+        for dy in 1..bh.saturating_sub(1) {
+            let py = by + dy;
+            if py < ih {
+                if bx < iw { img.put_pixel(bx, py, c); }
+                let xr = bx + bw.saturating_sub(1);
+                if xr < iw && xr != bx { img.put_pixel(xr, py, c); }
             }
         }
     }

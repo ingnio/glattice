@@ -12,7 +12,8 @@ export interface SheetDraft {
   padding: number;
   bgHex: string;
   bgTransparent: boolean;
-  border: boolean;
+  /** Border width in source-pixel units. 0 = no border. */
+  borderWidth: number;
   maxWidth: number | null;
   showFrameNumber: boolean;
   showTimestamp: boolean;
@@ -85,7 +86,7 @@ export const DEFAULT_SHEET: SheetDraft = {
   padding: 4,
   bgHex: "#ffffff",
   bgTransparent: false,
-  border: false,
+  borderWidth: 0,
   maxWidth: null,
   showFrameNumber: false,
   showTimestamp: false,
@@ -170,7 +171,12 @@ export async function loadPrefs(): Promise<Preferences> {
     ...DEFAULT_PREFS,
     ...(stored ?? {}),
     cursorMode: cursorMode ?? DEFAULT_PREFS.cursorMode,
-    sheet: { ...DEFAULT_SHEET, ...(stored?.sheet ?? {}) },
+    sheet: (() => {
+      const s = stored?.sheet as (Partial<SheetDraft> & { border?: boolean }) | undefined;
+      const borderWidth =
+        typeof s?.borderWidth === "number" ? s.borderWidth : s?.border ? 1 : 0;
+      return { ...DEFAULT_SHEET, ...(s ?? {}), borderWidth };
+    })(),
     simplify: { ...DEFAULT_SIMPLIFY, ...(stored?.simplify ?? {}) },
     spotlight: { ...DEFAULT_SPOTLIGHT, ...(stored?.spotlight ?? {}) },
   };

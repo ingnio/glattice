@@ -35,7 +35,7 @@ export function buildSheetConfig(
     background: sheet.bgTransparent
       ? [0, 0, 0, 0]
       : hexToRgba(sheet.bgHex, 255),
-    border: sheet.border,
+    borderWidth: Math.max(0, sheet.borderWidth ?? 0),
     borderColor: [200, 200, 200, 255],
     format,
     maxWidth:

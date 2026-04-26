@@ -46,7 +46,8 @@ export interface SheetConfig {
   frameStride: number;
   padding: number;
   background: [number, number, number, number];
-  border: boolean;
+  /** Border width in source pixels. 0 = no border. */
+  borderWidth: number;
   borderColor: [number, number, number, number];
   format: "png" | "jpeg" | "webp";
   maxWidth: number | null;

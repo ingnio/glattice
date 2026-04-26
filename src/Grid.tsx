@@ -233,14 +233,30 @@ export default function Grid({
         <span className="sheet-view__sep" />
 
         <div className="sheet-view__group">
-          <label className="sheet-view__field">
-            <span className="muted">Pad</span>
-            <input
-              type="number" min={0} max={40} value={sheet.padding}
-              onChange={(e) => onSheetChange({ padding: Math.max(0, Math.min(40, Number(e.target.value) || 0)) })}
-              className="sheet-view__num"
-            />
-          </label>
+          <span className="muted" style={{ fontSize: 11 }}>Pad</span>
+          <input
+            type="range" min={0} max={40} step={1} value={sheet.padding}
+            onChange={(e) => onSheetChange({ padding: Number(e.target.value) })}
+            className="sheet-bar__range" title="Padding between frames (px)"
+          />
+          <span className="muted sheet-bar__val">{sheet.padding}</span>
+        </div>
+
+        <span className="sheet-view__sep" />
+
+        <div className="sheet-view__group">
+          <span className="muted" style={{ fontSize: 11 }}>Border</span>
+          <input
+            type="range" min={0} max={10} step={1} value={sheet.borderWidth ?? 0}
+            onChange={(e) => onSheetChange({ borderWidth: Number(e.target.value) })}
+            className="sheet-bar__range" title="Border width (px, 0 = none)"
+          />
+          <span className="muted sheet-bar__val">{sheet.borderWidth ?? 0}</span>
+        </div>
+
+        <span className="sheet-view__sep" />
+
+        <div className="sheet-view__group">
           <label className="sheet-view__field">
             <span className="muted">Max-w</span>
             <input
@@ -268,14 +284,6 @@ export default function Grid({
             title="Transparent background"
           >
             Transparent
-          </button>
-          <button
-            type="button"
-            className={`chip ${sheet.border ? "chip--active" : ""}`}
-            onClick={() => onSheetChange({ border: !sheet.border })}
-            title="Frame border"
-          >
-            Border
           </button>
         </div>
 
@@ -314,12 +322,17 @@ export default function Grid({
         </div>
       </div>
 
-      {/* ——— Grid body — live sheet layout preview ——— */}
+      {/* ——— Grid body — live sheet layout preview ———
+            Outer div: full-width, provides the background colour/checkerboard.
+            Inner div: centred, constrained by max-width, holds the grid cells. */}
+      <div
+        className={`grid-view__body ${sheet.bgTransparent ? "grid-view__body--transparent" : ""}`}
+        style={{ background: sheet.bgTransparent ? undefined : sheet.bgHex }}
+      >
       <div
         ref={gridRef}
-        className={`grid-view__body ${sheet.bgTransparent ? "grid-view__body--transparent" : ""}`}
+        className="grid-view__layout"
         style={{
-          background: sheet.bgTransparent ? undefined : sheet.bgHex,
           gridTemplateColumns: `repeat(${effectiveCols}, 1fr)`,
           gap: `${Math.max(0, sheet.padding)}px`,
           padding: `${Math.max(0, sheet.padding)}px`,
@@ -362,7 +375,9 @@ export default function Grid({
                 lineLeft ? "grid-frame--line-left" : "",
                 lineRight ? "grid-frame--line-right" : "",
               ].filter(Boolean).join(" ")}
-              style={sheet.border ? { boxShadow: "inset 0 0 0 1px rgba(200,200,200,0.7)" } : undefined}
+              style={(sheet.borderWidth ?? 0) > 0
+                ? { boxShadow: `inset 0 0 0 ${sheet.borderWidth}px rgba(200,200,200,0.8)` }
+                : undefined}
               onPointerDown={(e) => {
                 if (e.button !== 0) return;
                 const target = e.target as HTMLElement;
@@ -413,6 +428,7 @@ export default function Grid({
             </div>
           );
         })}
+      </div>
       </div>
     </div>
   );

@@ -2228,21 +2228,39 @@ body {
   font-size: 12px;
 }
 
+/* Outer container: full-width, provides background colour + scrolling. */
 .grid-view__body {
   flex: 1;
   overflow-y: auto;
-  /* columns, gap, padding, and background are set by inline style
-     from the sheet settings so the grid mirrors the export layout. */
-  display: grid;
-  grid-auto-rows: min-content;
-  align-items: start;
 }
 
 .grid-view__body--transparent {
-  /* Checkerboard to indicate transparent background, same as image editors. */
-  background-image:
-    repeating-conic-gradient(#666 0% 25%, #999 0% 50%);
+  background-image: repeating-conic-gradient(#666 0% 25%, #999 0% 50%);
   background-size: 14px 14px;
+}
+
+/* Inner container: the actual grid cells, centred within the body. */
+.grid-view__layout {
+  display: grid;
+  grid-auto-rows: min-content;
+  align-items: start;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* ——— Inline slider for sheet-bar Pad / Border ——— */
+.sheet-bar__range {
+  width: 72px;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}
+
+.sheet-bar__val {
+  min-width: 20px;
+  text-align: right;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
 .grid-frame {
