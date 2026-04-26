@@ -1,0 +1,145 @@
+// Non-destructive, vector-style per-frame edits.
+//
+// Coordinates and sizes are always in SOURCE-image pixels — same
+// coordinate space as the full-resolution frame PNGs. The renderer
+// scales as needed when drawing to a display canvas or the sprite
+// sheet's resized cell.
+
+export type EditColor = [number, number, number, number]; // rgba 0..255
+
+export type Edit =
+  | {
+      kind: "rect";
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+      color: EditColor;
+      thickness: number;
+      fill: boolean;
+    }
+  | {
+      kind: "ellipse";
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+      color: EditColor;
+      thickness: number;
+      fill: boolean;
+    }
+  | {
+      kind: "arrow";
+      x1: number;
+      y1: number;
+      x2: number;
+      y2: number;
+      color: EditColor;
+      thickness: number;
+    }
+  | {
+      kind: "freehand";
+      points: Array<[number, number]>;
+      color: EditColor;
+      thickness: number;
+    }
+  | {
+      kind: "text";
+      /** Top-left of the text box (source pixels). */
+      x: number;
+      y: number;
+      /** Width/height of the text box. Lines wrap at `w`. */
+      w: number;
+      h: number;
+      text: string;
+      color: EditColor;
+      sizePx: number;
+    }
+  | {
+      kind: "blur";
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+      radius: number;
+    }
+  | {
+      /**
+       * Heuristic content-simplify. Downsamples the region into blocks,
+       * detects foreground via adaptive local-bg threshold, merges
+       * adjacent blocks into components, and renders each as a pill
+       * (or a circle for round-ish shapes).
+       *
+       * The three tuning fields below are optional; they default to
+       * the "reasonable for code screenshots" values in `paintEdits`.
+       */
+      kind: "simplify";
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+      /** Pixels per block. Smaller = finer detail, larger = chunkier. */
+      blockSize?: number;
+      /** Luminance delta (on the block plane) for a block to count as
+       *  foreground. Lower = more sensitive. */
+      threshold?: number;
+      /** Horizontal dilation radius (in BLOCK units) used to merge
+       *  letters into words and words into lines. */
+      merge?: number;
+      /** Bbox pad in BLOCK units around each detected component. */
+      padding?: number;
+      /** Cap (in source pixels) on the rounded-rect corner radius —
+       *  0 = sharp corners, large = pill / capsule shape. */
+      roundness?: number;
+    };
+
+export type EditTool =
+  | "select"
+  | "blur"
+  | "simplify"
+  | "rect"
+  | "ellipse"
+  | "arrow"
+  | "freehand"
+  | "text";
+
+/** All edits, keyed by frame index. */
+export type FrameEdits = Record<number, Edit[]>;
+
+/** Default palette for the color picker — fits the UI's accent tones. */
+export const EDIT_PALETTE: EditColor[] = [
+  [250, 204, 21, 255],   // amber (matches the marching-ants accent)
+  [239, 68, 68, 255],    // red
+  [34, 197, 94, 255],    // green
+  [59, 130, 246, 255],   // blue
+  [168, 85, 247, 255],   // purple
+  [255, 255, 255, 255],  // white
+  [17, 24, 39, 255],     // near-black
+];
+
+export function colorToCss(c: EditColor): string {
+  return `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${c[3] / 255})`;
+}
+
+/** Deep-ish clone of a single edit so we can safely mutate during drag. */
+export function cloneEdit(edit: Edit): Edit {
+  if (edit.kind === "freehand") {
+    return { ...edit, points: edit.points.map((p) => [p[0], p[1]] as [number, number]) };
+  }
+  return { ...edit };
+}
+
+export function getFrameEdits(all: FrameEdits, frame: number): Edit[] {
+  return all[frame] ?? [];
+}
+
+export function setFrameEdits(
+  all: FrameEdits,
+  frame: number,
+  edits: Edit[],
+): FrameEdits {
+  const next = { ...all };
+  if (edits.length === 0) delete next[frame];
+  else next[frame] = edits;
+  return next;
+}

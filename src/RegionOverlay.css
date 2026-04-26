@@ -1,0 +1,240 @@
+/* No globals here — the overlay renders inline in the main window
+ * and relies on its own container to fill the viewport. */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background-color: #0f1218;
+  overflow: hidden;
+  color: #fff;
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  cursor: crosshair;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.overlay__hint {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.65);
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Dashed amber crosshair guides that track the cursor before drag. */
+.overlay__guide {
+  position: fixed;
+  pointer-events: none;
+  background: transparent;
+  z-index: 1;
+}
+
+.overlay__guide--h {
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 1px dashed #facc15;
+  opacity: 0.85;
+}
+
+.overlay__guide--v {
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 1px dashed #facc15;
+  opacity: 0.85;
+}
+
+.overlay__mask {
+  position: fixed;
+  background: rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}
+
+.overlay__mask--top {
+  top: 0;
+  left: 0;
+  right: 0;
+}
+.overlay__mask--bottom {
+  bottom: 0;
+  left: 0;
+  right: 0;
+}
+.overlay__mask--left {
+  left: 0;
+}
+.overlay__mask--right {
+  right: 0;
+}
+
+/* Marching-ants border — four thin edge strips painted via repeating
+ * linear gradients, animated so the dashes "crawl" clockwise. Used
+ * for both the live drag rectangle and the window-snap suggestion
+ * so the region overlay and the recording indicator read as the
+ * same UI language. */
+.overlay__rect {
+  position: fixed;
+  background: transparent;
+  pointer-events: none;
+  z-index: 1;
+  background-image:
+    linear-gradient(90deg, #facc15 50%, transparent 50%),
+    linear-gradient(90deg, #facc15 50%, transparent 50%),
+    linear-gradient(0deg, #facc15 50%, transparent 50%),
+    linear-gradient(0deg, #facc15 50%, transparent 50%);
+  background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
+  background-size: 12px 2px, 12px 2px, 2px 12px, 2px 12px;
+  background-position: 0 0, 0 100%, 0 0, 100% 0;
+  animation: overlay-ants 0.6s linear infinite;
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.45));
+}
+
+@keyframes overlay-ants {
+  to {
+    background-position: 24px 0, -24px 100%, 0 -24px, 100% 24px;
+  }
+}
+
+/* The snap rect can use a slightly thicker strip so the user knows
+ * they're about to click-to-snap rather than continue dragging. */
+.overlay__rect--snap {
+  background-size: 14px 3px, 14px 3px, 3px 14px, 3px 14px;
+}
+
+.overlay__size {
+  position: absolute;
+  left: 0;
+  bottom: -26px;
+  background: #facc15;
+  color: #111;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 7px;
+  border-radius: 4px;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Magnifier lens — Snipping-Tool-style zoomed view that follows the
+ * cursor. The background is the overlay screenshot scaled and offset
+ * so the cursor's screen position maps to the centre of the lens. */
+.overlay__lens {
+  position: fixed;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  overflow: hidden;
+  pointer-events: none;
+  box-shadow:
+    inset 0 0 0 2px rgba(0, 0, 0, 0.35),
+    inset 0 0 0 3px rgba(255, 255, 255, 0.6),
+    0 4px 16px rgba(0, 0, 0, 0.35);
+  z-index: 3;
+  image-rendering: pixelated;
+}
+
+.overlay__lens-bg {
+  position: absolute;
+  inset: 0;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+}
+
+/* Center crosshair — two 1-px amber lines. */
+.overlay__lens-crosshair::before,
+.overlay__lens-crosshair::after {
+  content: "";
+  position: absolute;
+  background: #facc15;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+.overlay__lens-crosshair::before {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-0.5px);
+}
+.overlay__lens-crosshair::after {
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  transform: translateY(-0.5px);
+}
+
+.overlay__lens-size {
+  position: absolute;
+  left: 50%;
+  bottom: 4px;
+  transform: translateX(-50%);
+  background: #facc15;
+  color: #111;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+/* Loading state shown while the backdrop image is fetching.
+ * Centered card with a two-ring spinner — same visual language
+ * as the indicator-window prep card. */
+.overlay__loading {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  pointer-events: none;
+}
+
+.overlay__loading-spinner {
+  width: 48px;
+  height: 48px;
+  position: relative;
+}
+
+.overlay__loading-spinner::before,
+.overlay__loading-spinner::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 3px solid transparent;
+}
+
+.overlay__loading-spinner::before {
+  border-top-color: #facc15;
+  border-right-color: rgba(250, 204, 21, 0.35);
+  animation: overlay-spin 0.85s linear infinite;
+}
+
+.overlay__loading-spinner::after {
+  inset: 8px;
+  border: 2px dashed rgba(250, 204, 21, 0.5);
+  animation: overlay-spin 1.4s linear infinite reverse;
+}
+
+@keyframes overlay-spin {
+  to { transform: rotate(360deg); }
+}
+
+.overlay__loading-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.85);
+  letter-spacing: 0.01em;
+}

@@ -1,0 +1,2663 @@
+:root {
+  /* Light-by-default — matches the product mockup. Explicit dark mode
+   * lives under [data-theme="dark"]; system preference still wins when
+   * no data-theme is set. */
+  --bg: #f7f8fb;
+  --bg-elev: #ffffff;
+  --bg-panel: #ffffff;
+  --border: #e4e7ee;
+  --text: #111418;
+  --text-dim: #5b6270;
+  --accent: #2563eb;
+  --accent-2: #7c3aed;
+  --danger: #ef4444;
+  --success: #22c55e;
+  --warn: #f59e0b;
+  --radius: 12px;
+  --radius-sm: 6px;
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  --bg: #0f1115;
+  --bg-elev: #171a21;
+  --bg-panel: #1b1f27;
+  --border: #2a2f3a;
+  --text: #e6e8ee;
+  --text-dim: #9aa3b2;
+  --accent: #6ea8ff;
+  --accent-2: #8b5cf6;
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --bg: #0f1115;
+    --bg-elev: #171a21;
+    --bg-panel: #1b1f27;
+    --border: #2a2f3a;
+    --text: #e6e8ee;
+    --text-dim: #9aa3b2;
+    --accent: #6ea8ff;
+    --accent-2: #8b5cf6;
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  height: 100%;
+}
+
+body {
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
+  position: relative;
+}
+
+/* ——— compact-mode nav overlay ——————————————————————————————————— */
+
+.compact-nav__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 199;
+}
+
+.compact-nav__menu {
+  position: fixed;
+  top: 48px;
+  right: 8px;
+  min-width: 140px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 4px;
+  box-shadow: 0 10px 30px -6px rgba(0, 0, 0, 0.25);
+  z-index: 201;
+}
+
+.compact-nav__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 100ms;
+}
+
+.compact-nav__item:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.compact-nav__item:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.compact-nav__item--active {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ——— global bottom navigation ———————————————————————————————————— */
+
+.global-nav {
+  display: flex;
+  align-items: stretch;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.global-nav__item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 8px 4px;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  transition: color 120ms, background 120ms;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.global-nav__item:hover:not(:disabled) {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+
+.global-nav__item:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.global-nav__item--active {
+  color: var(--accent);
+}
+
+.global-nav__item--active:hover:not(:disabled) {
+  color: var(--accent);
+}
+
+.muted {
+  color: var(--text-dim);
+}
+
+/* ——— buttons ——————————————————————————————————————————————— */
+
+.btn {
+  font: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 120ms, background 120ms;
+}
+
+.btn:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.btn--primary:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.btn--danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+
+.btn--ghost {
+  background: transparent;
+  border-color: transparent;
+}
+
+.btn--ghost:hover:not(:disabled) {
+  background: var(--bg-elev);
+}
+
+.btn--sm {
+  padding: 4px 9px;
+  font-size: 12px;
+}
+
+.btn--xs {
+  padding: 2px 7px;
+  font-size: 11px;
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 120ms, border-color 120ms, color 120ms;
+}
+
+.icon-btn:hover:not(:disabled) {
+  background: var(--bg-elev);
+  border-color: var(--border);
+}
+
+.icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.icon-btn--lg {
+  width: 52px;
+  height: 52px;
+}
+
+.icon-btn--xs {
+  width: 24px;
+  height: 24px;
+}
+
+.icon-btn--active {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.icon-btn--busy {
+  animation: spin 1s linear infinite;
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  padding: 2px 4px;
+  font-size: 12px;
+}
+
+.link-btn:hover {
+  text-decoration: underline;
+}
+
+.chip {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.chip--active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-left: 8px;
+}
+
+.tag--excluded {
+  background: color-mix(in srgb, var(--warn) 20%, transparent);
+  border-color: color-mix(in srgb, var(--warn) 40%, transparent);
+  color: var(--warn);
+}
+
+/* ——— banners ——————————————————————————————————————————————— */
+
+.banner {
+  padding: 10px 14px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 10px 14px 0;
+  border-radius: var(--radius);
+}
+
+.banner--info {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.banner--warn {
+  background: color-mix(in srgb, var(--warn) 15%, transparent);
+  color: var(--warn);
+  border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent);
+}
+
+.banner--error {
+  background: color-mix(in srgb, var(--danger) 15%, transparent);
+  color: var(--danger);
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
+  cursor: pointer;
+}
+
+.banner__dismiss {
+  font-size: 11px;
+  opacity: 0.7;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* ——— home (mockup layout) ——————————————————————————————— */
+
+.home2 {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 24px 24px;
+  gap: 14px;
+  /* Layered backgrounds (top layer drawn first):
+   *   1. dotted pattern
+   *   2. soft bottom-to-top lavender wash
+   *   3. base canvas */
+  background-image:
+    radial-gradient(
+      color-mix(in srgb, var(--accent) 14%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to top,
+      color-mix(in srgb, var(--accent-2) 14%, var(--bg)) 0%,
+      var(--bg) 340px
+    );
+  background-size: 22px 22px, 100% 100%;
+  background-repeat: repeat, no-repeat;
+  overflow-y: auto;
+}
+
+/* Compact mode: no mascot, tighter paddings/gaps, smaller card.
+ * The card sheds its forced 1:1 aspect so it shrinks to its contents
+ * instead of leaving ~100px of empty space below the drop area. */
+.home2--compact {
+  /* Equal padding on every side so the card sits in a visually
+   * balanced inset whether the window is the default tight size or
+   * slightly resized by the user. */
+  padding: 8px;
+  gap: 6px;
+  justify-content: center;
+}
+
+.home2--compact .home2__header {
+  padding-bottom: 0;
+}
+
+.home2--compact .home2__brand-name {
+  font-size: 13px;
+}
+
+.home2--compact .home2__card {
+  width: 270px;
+  padding: 8px;
+  gap: 6px;
+  aspect-ratio: auto;
+  margin-top: auto;
+  margin-bottom: auto;
+}
+
+.home2--compact .action-grid {
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+
+.home2--compact .action-card {
+  aspect-ratio: auto;
+  min-height: 0;
+  padding: 8px 6px;
+  gap: 6px;
+}
+
+.home2--compact .action-card__icon {
+  width: 32px;
+  height: 32px;
+}
+
+.home2--compact .action-card__title {
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+/* Drop the "Capture a new GIF" / "Record just an area" subtitles in
+ * compact — they're redundant once the title + icon are visible, and
+ * removing them lets the cards stay short. */
+.home2--compact .action-card__subtitle {
+  display: none;
+}
+
+.home2--compact .drop-area {
+  padding: 6px 10px;
+  gap: 6px;
+  flex-direction: row;
+  justify-content: center;
+}
+
+.home2--compact .drop-area__title {
+  font-size: 12px;
+}
+
+/* The "drag and drop a .gif" hint is too verbose for compact — collapse
+ * to just the upload icon + title. */
+.home2--compact .drop-area__hint {
+  display: none;
+}
+
+.home2--compact .drop-area > svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Drop the "or" divider entirely in compact — the cards above and the
+ * drop link below speak for themselves and the divider eats vertical
+ * space we'd rather give back to the window's height budget. */
+.home2--compact .home2__or {
+  display: none;
+}
+
+/* Tighter recording state when compact: shorter Stop button + smaller
+ * timer so the active-recording UI fits in the same window. */
+.home2--compact .home2__recording {
+  gap: 8px;
+}
+
+.home2--compact .big-btn {
+  padding: 8px 14px;
+  font-size: 13px;
+  width: 120px;
+  height: 80px;
+  gap: 4px;
+}
+
+/* The danger Stop button has its own width/height so it stands out at
+ * full size; in compact mode we collapse to the same compact footprint
+ * as the other buttons so it fits the 300×240 window. */
+.home2--compact .big-btn--danger {
+  width: 140px;
+  height: 54px;
+  flex-direction: row;
+  gap: 8px;
+}
+
+.home2__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.home2__brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.home2__logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+}
+
+.home2__logo-img {
+  width: 26px;
+  height: 26px;
+  display: block;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.home2--compact .home2__logo-img {
+  width: 22px;
+  height: 22px;
+}
+
+.home2__brand-name {
+  color: var(--text);
+  font-family:
+    "Quicksand",
+    "Nunito",
+    "Comfortaa",
+    ui-rounded,
+    Inter,
+    system-ui,
+    sans-serif;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1;
+}
+
+.home2__header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.home2__header-right .icon-btn {
+  color: var(--text-dim);
+  border-radius: 999px;
+  border-color: var(--border);
+  background: var(--bg-elev);
+}
+
+.home2__header-right .icon-btn:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+/* Theme toggle dropdown */
+.theme-toggle {
+  position: relative;
+}
+
+.theme-toggle__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--bg-elev);
+  color: var(--text);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  transition: border-color 120ms, background 120ms;
+}
+
+.theme-toggle__btn:hover {
+  border-color: var(--accent);
+}
+
+.theme-toggle__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 9;
+}
+
+.theme-toggle__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 120px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 4px;
+  box-shadow: 0 10px 30px -6px rgba(0, 0, 0, 0.2);
+  z-index: 10;
+}
+
+.theme-toggle__item {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.theme-toggle__item:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.theme-toggle__item--active {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.theme-toggle__divider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+}
+
+/* Hero */
+.home2__hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
+  padding: 8px 0 4px;
+}
+
+.home2__mascot {
+  position: relative;
+  width: 260px;
+  max-width: 70vw;
+  aspect-ratio: 1 / 1;
+  margin-bottom: 4px;
+}
+
+.home2__sparkles {
+  position: absolute;
+  inset: -8px;
+  width: calc(100% + 16px);
+  height: calc(100% + 16px);
+  fill: color-mix(in srgb, var(--accent) 45%, transparent);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.home2__mascot-img {
+  position: relative;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.home2__title {
+  margin: 8px 0 2px;
+  font-size: 58px;
+  font-weight: 400;
+  letter-spacing: -0.015em;
+  line-height: 1;
+  background: linear-gradient(
+    105deg,
+    var(--accent) 0%,
+    var(--accent-2) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-family:
+    "Quicksand",
+    "Nunito",
+    "Comfortaa",
+    ui-rounded,
+    Inter,
+    system-ui,
+    sans-serif;
+}
+
+/* Two mascots ship in the bundle (light + dark backgrounds). Both
+ * always render; CSS just toggles which one is visible based on the
+ * active theme. The hidden one stacks on top of the visible one in
+ * the same flex slot via absolute positioning. */
+.home2__mascot {
+  position: relative;
+}
+
+.home2__mascot-img--dark {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* Default (light theme): show the light mascot, hide the dark one. */
+.home2__mascot-img--dark {
+  opacity: 0;
+}
+
+/* Explicit dark mode swaps. */
+[data-theme="dark"] .home2__mascot-img--light {
+  opacity: 0;
+}
+[data-theme="dark"] .home2__mascot-img--dark {
+  opacity: 1;
+}
+
+/* System theme = dark falls back to OS preference. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .home2__mascot-img--light {
+    opacity: 0;
+  }
+  :root:not([data-theme]) .home2__mascot-img--dark {
+    opacity: 1;
+  }
+}
+
+.home2__tagline {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 16px;
+}
+
+/* Card container — a square the action cards sit inside */
+.home2__card {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 14px 40px -18px color-mix(in srgb, var(--accent-2) 30%, transparent);
+  width: 400px;
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+.home2__card > .drop-area {
+  flex: 1;
+}
+
+.action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 160px);
+  gap: 14px;
+  justify-content: center;
+}
+
+.action-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 22px 18px;
+  background: var(--bg);
+  border: 1px solid rgba(15, 23, 42, 0.025);
+  border-radius: 14px;
+  color: var(--text);
+  cursor: pointer;
+  text-align: center;
+  aspect-ratio: 1 / 1;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.03),
+    0 10px 24px -14px rgba(0, 0, 0, 0.12);
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+
+[data-theme="dark"] .action-card,
+:root:not([data-theme]) .action-card {
+  /* Darker canvases need a light-alpha border instead of dark-on-dark. */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .action-card {
+    border-color: rgba(255, 255, 255, 0.03);
+  }
+}
+
+[data-theme="dark"] .action-card {
+  border-color: rgba(255, 255, 255, 0.07);
+}
+
+.action-card:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  transform: translateY(-2px);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 14px 32px -14px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.action-card:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.action-card:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.action-card__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  background: var(--bg-elev);
+  color: var(--accent);
+  border: 1px solid var(--border);
+}
+
+.action-card__title {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.action-card__subtitle {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.action-card--primary {
+  /* Mockup-matching gradient: softer indigo at the top-left, deeper
+   * violet at the bottom-right. A faint inner top-left highlight
+   * adds a little lift without reading as a separate "shine". */
+  background:
+    radial-gradient(
+      120% 80% at 0% 0%,
+      rgba(255, 255, 255, 0.18) 0%,
+      rgba(255, 255, 255, 0) 55%
+    ),
+    linear-gradient(135deg, #6a86e3 0%, #7955e2 100%);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.06),
+    0 18px 36px -14px color-mix(in srgb, #7955e2 70%, transparent);
+}
+
+.action-card--primary .action-card__subtitle {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.action-card--primary .action-card__icon {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.32);
+  color: #fff;
+}
+
+.action-card--primary:hover:not(:disabled) {
+  filter: brightness(0.96);
+  box-shadow: 0 12px 32px -10px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.action-card--active {
+  border-color: color-mix(in srgb, var(--accent) 15%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg));
+}
+
+.action-card--active .action-card__icon {
+  color: var(--accent);
+}
+
+/* "or" divider */
+.home2__or {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 4px 0;
+}
+
+.home2__or-line {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.home2__or-text {
+  font-size: 13px;
+}
+
+/* Drop area */
+.drop-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 30px 16px;
+  background: transparent;
+  border: 2px dashed var(--border);
+  border-radius: 14px;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  transition: border-color 160ms, background 160ms;
+}
+
+.drop-area > svg {
+  color: var(--accent);
+}
+
+.drop-area:hover,
+.drop-area--active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.drop-area__title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.drop-area__hint {
+  font-size: 13px;
+}
+
+.home2__recording {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+}
+
+/* Footer meta strip */
+.home2__meta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.home2__meta-chip {
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+}
+
+.home2__meta-dot {
+  color: var(--text-dim);
+}
+
+/* ——— legacy home (retained for busy/recording sub-markup) ——— */
+
+.home {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 20px 20px;
+  position: relative;
+  transition: background 120ms;
+}
+
+.home--drag {
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg));
+}
+
+.home__chrome {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 16px;
+}
+
+.home__title {
+  margin: 0;
+  font-size: 18px;
+  letter-spacing: -0.01em;
+  background: linear-gradient(90deg, var(--accent) 0%, var(--accent-2) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.home__stage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  text-align: center;
+}
+
+.big-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.big-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 140px;
+  height: 140px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.big-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-elev));
+  color: var(--accent);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px -6px color-mix(in srgb, var(--accent) 50%, transparent);
+}
+
+.big-btn:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px -4px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.big-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.big-btn--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.big-btn--primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 82%, #000);
+  border-color: color-mix(in srgb, var(--accent) 82%, #000);
+  color: #fff;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 22px -6px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+.big-btn--active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-elev));
+}
+
+.big-btn--danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+  width: 180px;
+  height: 160px;
+}
+
+.big-btn--danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 82%, #000);
+  border-color: color-mix(in srgb, var(--danger) 82%, #000);
+  color: #fff;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 22px -6px color-mix(in srgb, var(--danger) 60%, transparent);
+}
+
+/* Inline "Open" button that sits in the drop-hint line. */
+.open-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid transparent;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 120ms, border-color 120ms;
+  margin-right: 6px;
+}
+
+.open-link:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.home__drop-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.home__region-info {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 13px;
+  text-align: center;
+}
+
+.home__drop-hint {
+  font-size: 13px;
+  margin-top: 12px;
+}
+
+.home__recording {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.home__recording-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--danger);
+  animation: rec-pulse 1.5s infinite;
+}
+
+@keyframes rec-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.home__recording-time {
+  font-size: 42px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.home__recording-meta {
+  font-size: 13px;
+}
+
+/* Full-viewport panel shown between clicking "Select region" and the
+ * region overlay finishing its setup. Covers the webview during the
+ * window's resize-to-fullscreen transition so there's no black flash. */
+.prep-overlay {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  z-index: 1000;
+}
+
+.prep-overlay__text {
+  font-size: 14px;
+  color: var(--text-dim);
+}
+
+.home__busy {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  flex: 1;
+}
+
+.home__busy-spinner {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 3px solid color-mix(in srgb, var(--accent) 20%, transparent);
+  border-top-color: var(--accent);
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.home__busy-text {
+  font-size: 14px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ——— recent recordings panel ————————————————————————————————————— */
+
+.home2__recent {
+  /* Same visual container as .home2__card */
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px 14px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  width: 400px;
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+.recent__header {
+  display: flex;
+  align-items: center;
+  padding: 0 2px;
+}
+
+.recent__title {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.recent__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.recent-entry {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: background 120ms;
+}
+
+.recent-entry:hover {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.recent-entry__thumb {
+  width: 52px;
+  height: 36px;
+  border-radius: 4px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+}
+
+.recent-entry__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.recent-entry__thumb-placeholder {
+  width: 100%;
+  height: 100%;
+  background: var(--bg-elev);
+}
+
+.recent-entry__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.recent-entry__meta {
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+
+.recent-entry__time {
+  font-size: 11px;
+}
+
+.recent-entry__remove {
+  opacity: 0;
+  transition: opacity 120ms;
+  flex-shrink: 0;
+}
+
+.recent-entry:hover .recent-entry__remove {
+  opacity: 1;
+}
+
+/* ——— end recent recordings ————————————————————————————————————— */
+
+.home__warn {
+  margin-top: auto;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--warn) 15%, transparent);
+  color: var(--warn);
+  border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent);
+  font-size: 13px;
+}
+
+/* ——— config ———————————————————————————————————————————————— */
+
+.config {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 20px 20px;
+  min-height: 0;
+}
+
+.config__chrome {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 18px;
+}
+
+.config__title {
+  margin: 0;
+  font-size: 18px;
+}
+
+.config__body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  min-height: 0;
+  /* Bleed into the right padding of .config so the scrollbar sits at
+   * the true window edge instead of being inset from it. The inner
+   * padding-right preserves the original content gutter. */
+  margin-right: -20px;
+  padding-right: 20px;
+}
+
+.config__section {
+  padding: 14px 16px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  font-size: 13px;
+}
+
+.row > span {
+  font-weight: 500;
+}
+
+.row__control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.row__hint {
+  margin: 6px 0 0;
+  font-size: 12px;
+}
+
+.row__control input[type="number"],
+.row__control input[type="text"],
+.row__control select,
+.row__control input[type="color"] {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 5px 8px;
+  font: inherit;
+}
+
+.row__control input[type="number"] {
+  width: 80px;
+}
+
+.row__control input[type="color"] {
+  width: 38px;
+  height: 28px;
+  padding: 0;
+  cursor: pointer;
+}
+
+.inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.check input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+
+/* Switch (iOS-style) — used for toggles on the config page. */
+.switch {
+  display: inline-block;
+  position: relative;
+  width: 40px;
+  height: 22px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.switch .slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background: var(--border);
+  border-radius: 999px;
+  transition: background 120ms;
+}
+
+.switch .slider::before {
+  content: "";
+  position: absolute;
+  height: 18px;
+  width: 18px;
+  left: 2px;
+  top: 2px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 160ms;
+}
+
+.switch input:checked + .slider {
+  background: var(--accent);
+}
+
+.switch input:checked + .slider::before {
+  transform: translateX(18px);
+}
+
+.switch input:disabled + .slider {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.fps-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+}
+
+/* When the window is narrow (compact UI or just user-resized small),
+ * stack the label above the control so the control area gets the
+ * full row width — otherwise the FPS presets + custom input push the
+ * custom input onto its own awkward line. */
+@media (max-width: 440px) {
+  .row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+  .row__control {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .fps-row {
+    width: 100%;
+  }
+  .save-dir {
+    justify-content: flex-start;
+  }
+  .save-dir__path {
+    text-align: left;
+  }
+}
+
+.save-dir {
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-end;
+}
+
+.save-dir__path {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  font-size: 12px;
+  min-width: 0;
+}
+
+/* ——— player ——————————————————————————————————————————————— */
+
+.player {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.player__chrome {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.player__chrome .icon-btn,
+.grid-view__chrome .icon-btn,
+.zoom__chrome .icon-btn,
+.zoom__bar .icon-btn {
+  color: var(--text-dim);
+}
+
+.player__chrome .icon-btn:hover:not(:disabled),
+.grid-view__chrome .icon-btn:hover:not(:disabled),
+.zoom__chrome .icon-btn:hover:not(:disabled),
+.zoom__bar .icon-btn:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.player__chrome-right .icon-btn,
+.grid-view__tools .icon-btn,
+.zoom__tools .icon-btn,
+.zoom__bar .icon-btn {
+  border-color: var(--border);
+  background: var(--bg-elev);
+}
+
+.player__chrome-right .icon-btn:hover:not(:disabled),
+.grid-view__tools .icon-btn:hover:not(:disabled),
+.zoom__tools .icon-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.player__title {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.player__chrome-right {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.player__stage {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  overflow: auto;
+  padding: 12px;
+}
+
+.player__img,
+.player__canvas-wrap {
+  position: relative;
+  /* Fill the stage so the canvas inside can be centered via flex
+   * and the max-* constraints reference a real, non-circular box.
+   * Without this the wrap was inline-block and sized to the canvas's
+   * intrinsic dimensions — so a 4K recording inside an 800-px-wide
+   * stage just overflowed instead of scaling down to fit. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  line-height: 0;
+}
+
+.player__canvas {
+  /* `max-*: 100%` references the wrap which is now an explicit-sized
+   * flex container, so the canvas scales down preserving aspect ratio
+   * for any animation larger than the stage. width:auto + height:auto
+   * keeps the canvas at intrinsic when it already fits — no upscaling
+   * blur for small GIFs. */
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  image-rendering: auto;
+  display: block;
+}
+
+.player__canvas--draggable {
+  cursor: grab;
+}
+
+.player__canvas--draggable:active {
+  cursor: grabbing;
+}
+
+/* Tiny corner hint so the drag-out affordance is discoverable. The
+ * canvas-wrap fades it in only on hover so it doesn't compete with
+ * the recording itself most of the time. */
+.player__drag-hint {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 3px 8px;
+  background: rgba(15, 17, 21, 0.7);
+  color: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease-out;
+}
+
+.player__canvas-wrap:hover .player__drag-hint {
+  opacity: 1;
+}
+
+.player__scrubber {
+  padding: 12px 18px 0;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border);
+}
+
+.scrub {
+  position: relative;
+  width: 100%;
+  height: 22px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.scrub--disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.scrub__track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 4px;
+  transform: translateY(-50%);
+  background: var(--border);
+  border-radius: 999px;
+}
+
+.scrub__fill {
+  position: absolute;
+  top: 50%;
+  height: 4px;
+  transform: translateY(-50%);
+  background: var(--accent);
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+/* Highlights the in/out region between trim handles. Sits behind the
+ * fill (which still shows the playback progress through the region). */
+.scrub__trim-region {
+  position: absolute;
+  top: 50%;
+  height: 4px;
+  transform: translateY(-50%);
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+/* Dimmed overlay drawn over the track outside the trim window. */
+.scrub__trim-mask {
+  position: absolute;
+  top: 50%;
+  height: 4px;
+  transform: translateY(-50%);
+  background: color-mix(in srgb, var(--bg-panel) 70%, transparent);
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+.scrub__trim-handle {
+  position: absolute;
+  top: 50%;
+  width: 6px;
+  height: 18px;
+  transform: translate(-50%, -50%);
+  background: var(--accent);
+  border: 1px solid var(--bg-panel);
+  border-radius: 2px;
+  cursor: ew-resize;
+  z-index: 2;
+  transition: transform 120ms, background 120ms;
+}
+
+.scrub__trim-handle:hover,
+.scrub__trim-handle.is-dragging {
+  transform: translate(-50%, -50%) scale(1.15);
+  background: color-mix(in srgb, var(--accent) 80%, white);
+}
+
+.scrub__trim-handle--in::after,
+.scrub__trim-handle--out::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 4px;
+  height: 8px;
+  border-style: solid;
+  border-color: var(--bg-panel);
+  transform: translateY(-50%);
+}
+
+.scrub__trim-handle--in::after {
+  left: -1px;
+  border-width: 0 0 0 2px;
+}
+
+.scrub__trim-handle--out::after {
+  right: -1px;
+  border-width: 0 2px 0 0;
+}
+
+.scrub__handle {
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  background: var(--accent);
+  border: 2px solid var(--bg-panel);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
+  pointer-events: none;
+  transition: transform 120ms;
+}
+
+.scrub:hover .scrub__handle,
+.scrub--active .scrub__handle {
+  transform: translate(-50%, -50%) scale(1.25);
+}
+
+.player__controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 10px 12px 12px;
+  border-top: none;
+  background: var(--bg-panel);
+}
+
+.player__counter {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  min-width: 64px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+}
+
+.player__trim-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 4px 2px 6px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border-radius: 4px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.player__trim-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  padding: 2px;
+  margin: 0;
+  color: inherit;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.player__trim-clear:hover {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.player__speed {
+  position: relative;
+}
+
+.player__speed-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 9;
+}
+
+.player__speed-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 90px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 4px;
+  box-shadow: 0 10px 28px -8px rgba(0, 0, 0, 0.25);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.player__speed-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 6px 10px 4px;
+}
+
+.player__speed-item {
+  background: transparent;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  color: var(--text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.player__speed-item:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.player__speed-item--active {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.player__save {
+  position: relative;
+}
+
+/* Pre-recording countdown — full-viewport scrim with a giant number,
+ * a soft pulse animation, and a hint that ESC cancels. */
+.countdown-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: rgba(15, 17, 21, 0.78);
+  backdrop-filter: blur(4px);
+  cursor: pointer;
+  animation: countdown-fade 0.18s ease-out;
+}
+
+.countdown-overlay__number {
+  font-size: 156px;
+  font-weight: 700;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  animation: countdown-pop 1s ease-out;
+  text-shadow: 0 6px 32px rgba(239, 68, 68, 0.5);
+}
+
+.countdown-overlay__hint {
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+@keyframes countdown-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes countdown-pop {
+  0% {
+    transform: scale(1.4);
+    opacity: 0.4;
+  }
+  20% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.player__save-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+  z-index: 10;
+  min-width: 90px;
+}
+
+.player__save-item {
+  background: transparent;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 4px;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.player__save-item:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+/* ——— grid ———————————————————————————————————————————————— */
+
+.grid-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.grid-view__chrome {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.grid-view__title {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.grid-view__tools {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.grid-view__sep {
+  display: inline-block;
+  width: 1px;
+  height: 22px;
+  background: var(--border);
+  margin: 0 4px;
+}
+
+.grid-view__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  grid-auto-rows: min-content;
+  align-items: start;
+  gap: 10px;
+}
+
+.grid-frame {
+  display: flex;
+  flex-direction: column;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--bg-elev);
+  transition: border-color 120ms, opacity 120ms;
+}
+
+.grid-frame:hover {
+  border-color: var(--accent);
+}
+
+.grid-frame img,
+.grid-frame__canvas {
+  width: 100%;
+  height: auto;
+  display: block;
+  cursor: pointer;
+  background: #000;
+}
+
+.grid-frame--dragging .grid-frame__canvas,
+.grid-frame--dragging img {
+  cursor: grabbing;
+}
+
+.grid-frame--dragging {
+  opacity: 0.35;
+}
+
+/* Vertical insertion-line indicators. box-shadow doesn't affect layout
+ * and is not clipped by the grid cell, so it shows cleanly between cards. */
+.grid-frame--line-left {
+  box-shadow: -3px 0 0 0 var(--accent);
+}
+
+.grid-frame--line-right {
+  box-shadow: 3px 0 0 0 var(--accent);
+}
+
+.grid-frame__actions {
+  display: flex;
+  gap: 2px;
+}
+
+.grid-frame__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.grid-frame__index {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+}
+
+.grid-frame--excluded {
+  opacity: 0.45;
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+}
+
+.grid-frame--excluded img {
+  filter: grayscale(1) contrast(0.8);
+}
+
+/* ——— zoom ———————————————————————————————————————————————— */
+
+.zoom {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* zoom__chrome is replaced by zoom__bar — kept for reference in
+ * shared icon-btn rules above; the element no longer renders. */
+
+.zoom__bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+
+.zoom__bar__info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.zoom__bar__sep {
+  display: inline-block;
+  width: 1px;
+  align-self: stretch;
+  background: var(--border);
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+
+/* Contextual property strip — renders below zoom__bar only when a
+ * tool or selected edit has adjustable parameters. */
+.editor-props {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+
+.zoom__title {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+}
+
+.zoom__tools {
+  display: flex;
+  gap: 6px;
+}
+
+.zoom__stage {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  overflow: auto;
+  padding: 16px;
+}
+
+.zoom__img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+/* ——— per-frame editor ———————————————————————————————————————————— */
+
+/* editor-bar no longer renders as a standalone element;
+ * its tool-group and swatch styles are still used inside
+ * zoom__bar and editor-props. */
+.editor-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+
+.editor-bar__group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.editor-bar__thickness {
+  gap: 8px;
+  min-width: 150px;
+}
+
+.editor-bar__thickness input[type="range"] {
+  flex: 1;
+  min-width: 80px;
+}
+
+.editor-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.editor-tool:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.editor-tool.is-active {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.editor-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.15) inset;
+  transition: transform 0.08s, border-color 0.12s;
+}
+
+.editor-swatch:hover {
+  transform: scale(1.1);
+}
+
+.editor-swatch.is-active {
+  border-color: var(--accent);
+  transform: scale(1.1);
+}
+
+.editor-surface {
+  position: relative;
+  /* Same fix as .player__canvas-wrap — fill the stage so the img's
+   * max-* constraints reference a real, non-circular box. The
+   * canvas overlay is imperatively pinned to the img's bounding
+   * rect by Zoom's ResizeObserver, so it follows the scaled img. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  line-height: 0;
+}
+
+.editor-img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.editor-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: auto;
+  cursor: default;
+  touch-action: none;
+}
+
+.editor-canvas--select {
+  cursor: default;
+}
+
+.editor-canvas--rect,
+.editor-canvas--ellipse,
+.editor-canvas--arrow,
+.editor-canvas--freehand,
+.editor-canvas--blur,
+.editor-canvas--simplify {
+  cursor: crosshair;
+}
+
+.editor-canvas--text {
+  cursor: text;
+}
+
+.tag--edited {
+  margin-left: 8px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+}
+
+.editor-text-input {
+  position: absolute;
+  min-width: 120px;
+  padding: 2px 6px;
+  background: rgba(0, 0, 0, 0.65);
+  color: inherit;
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  outline: none;
+  font-family: "Roboto Mono", ui-monospace, Menlo, monospace;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: 0.01em;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+  caret-color: var(--accent);
+  z-index: 3;
+}
+
+.editor-text-input::placeholder {
+  color: rgba(255, 255, 255, 0.5);
+  font-weight: 400;
+}
+
+.editor-text-area {
+  position: absolute;
+  padding: 0;
+  margin: 0;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px dashed var(--accent);
+  border-radius: 2px;
+  outline: none;
+  resize: none;
+  overflow: hidden;
+  font-family: "Roboto Mono", ui-monospace, Menlo, monospace;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+  caret-color: var(--accent);
+  z-index: 3;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.editor-text-area::placeholder {
+  color: rgba(255, 255, 255, 0.45);
+  font-weight: 400;
+}
+
+/* Compact slider primitive: label + value stacked above a narrow
+ * range input. Used standalone (Size, Strength) and inside the
+ * `.simplify-sliders` row for the 5 simplify-tool controls. */
+.compact-slider {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 0 0 110px;
+  min-width: 90px;
+}
+
+.compact-slider__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--text-dim);
+}
+
+.compact-slider__label {
+  letter-spacing: 0.02em;
+}
+
+.compact-slider__value {
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.compact-slider input[type="range"] {
+  width: 100%;
+  margin: 0;
+}
+
+/* Row container for the 5 simplify controls — packs them tighter and
+ * lets each cell flex-grow within the row's available width. */
+.simplify-sliders {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.simplify-sliders .compact-slider {
+  flex: 1 1 80px;
+  min-width: 76px;
+  max-width: 140px;
+}
+
+
+.zoom__controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 10px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+
+/* ——— save modal ———————————————————————————————————————————————— */
+
+/* ——— sheet view (full-page) ———————————————————————————————————————
+ * Modeled after the Zoom (frame editor) layout: chrome at top, a
+ * horizontal-flowing config bar under it, preview stage filling the
+ * remainder. Replaces the older SaveModal modal. */
+
+.sheet-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sheet-view__bar {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+  overflow-x: auto;
+}
+
+.sheet-view__title {
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.sheet-view__bar .icon-btn {
+  border-color: var(--border);
+  background: var(--bg-elev);
+  flex-shrink: 0;
+}
+
+.sheet-view__bar .icon-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.sheet-view__group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sheet-view__group-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-right: 2px;
+}
+
+.sheet-view__sep {
+  display: inline-block;
+  width: 1px;
+  align-self: stretch;
+  background: var(--border);
+  margin: 0 2px;
+}
+
+.sheet-view__field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.sheet-view__bar input[type="number"],
+.sheet-view__bar input[type="text"],
+.sheet-view__bar select {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 13px;
+}
+
+.sheet-view__num {
+  width: 52px;
+  text-align: right;
+}
+
+.sheet-view__num--wide {
+  width: 72px;
+}
+
+/* Arrow-only position picker — same height as chips, minimal width. */
+.sheet-view__pos-select {
+  padding: 4px 6px;
+  border-radius: 999px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  width: auto;
+}
+
+.sheet-view__bar input[type="color"] {
+  width: 28px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  background: transparent;
+}
+
+.sheet-view__check {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12.5px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.sheet-view__check input {
+  margin: 0;
+}
+
+.sheet-view__stage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #000;
+  overflow: auto;
+  padding: 16px;
+  min-height: 0;
+}
+
+.sheet-view__preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  max-height: 100%;
+  min-height: 0;
+}
+
+.sheet-view__img-wrap {
+  position: relative;
+  display: inline-block;
+  line-height: 0;
+}
+
+.sheet-view__img-wrap:hover .player__drag-hint {
+  opacity: 1;
+}
+
+.sheet-view__img {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  display: block;
+  cursor: grab;
+  -webkit-user-drag: none;
+  user-select: none;
+}
+
+.sheet-view__img:active {
+  cursor: grabbing;
+}
+
+.sheet-view__meta {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.65);
+  font-variant-numeric: tabular-nums;
+}
+
+.sheet-view__busy {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: rgba(255, 255, 255, 0.7);
+}
