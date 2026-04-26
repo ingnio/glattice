@@ -3,7 +3,7 @@ import { convertFileSrc, FrameThumb, InputEvent } from "./lib/tauri";
 import { FrameEdits, getFrameEdits } from "./lib/edits";
 import { drawAnnotation, drawClicks, drawCursor, drawKeys, drawSpotlight, paintEdit } from "./lib/paintEdits";
 import { AnnotationPos, SheetDraft, SpotlightDraft } from "./lib/prefs";
-import { IconBack, IconEye, IconMore, IconPlus, IconTrash } from "./icons";
+import { IconBack, IconEye, IconPlus, IconTrash, IconX } from "./icons";
 
 interface Props {
   thumbs: FrameThumb[];
@@ -19,6 +19,8 @@ interface Props {
   onZoom: (index: number) => void;
   onReorder: (newOrder: number[]) => void;
   onDelete: (indices: number[]) => void;
+  frameDelays: Record<number, number>;
+  onDelayChange: (frameIndex: number, extraMs: number) => void;
   onInsertBlank: () => void;
   onPreview: () => void;
   onBack: () => void;
@@ -38,6 +40,8 @@ export default function Grid({
   onZoom,
   onReorder,
   onDelete,
+  frameDelays,
+  onDelayChange,
   onInsertBlank,
   onPreview,
   onBack,
@@ -47,8 +51,8 @@ export default function Grid({
   const [selectedSet, setSelectedSet] = useState<Set<number>>(new Set());
   const lastClickedPosRef = useRef<number | null>(null);
   const [restoreOpen, setRestoreOpen] = useState(false);
-  // Original index of the frame whose kebab menu is currently open.
-  const [menuOpenIdx, setMenuOpenIdx] = useState<number | null>(null);
+  // Frame indices shown in the Properties modal (null = closed).
+  const [propertiesTargets, setPropertiesTargets] = useState<number[] | null>(null);
 
   // Right-click context menu
   const [contextMenu, setContextMenu] = useState<{
@@ -450,47 +454,21 @@ export default function Grid({
               />
               <div className="grid-frame__footer">
                 <span className="grid-frame__index">{pos + 1}</span>
-                <div className="grid-frame__actions">
-                  <button
-                    type="button"
-                    className="icon-btn icon-btn--xs"
-                    title="Frame options"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setMenuOpenIdx((prev) => (prev === t.index ? null : t.index));
-                    }}
-                  >
-                    <IconMore size={14} />
-                  </button>
-                  {menuOpenIdx === t.index && (
-                    <>
-                      <div
-                        className="grid-frame__menu-scrim"
-                        onClick={(e) => { e.stopPropagation(); setMenuOpenIdx(null); }}
-                      />
-                      <div className="grid-frame__menu" role="menu">
-                        <button
-                          type="button"
-                          role="menuitem"
-                          className="grid-frame__menu-item grid-frame__menu-item--danger"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onDelete([t.index]);
-                            setMenuOpenIdx(null);
-                          }}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
               </div>
             </div>
           );
         })}
       </div>
       </div>
+
+      {propertiesTargets !== null && (
+        <FramePropertiesModal
+          targets={propertiesTargets}
+          frameDelays={frameDelays}
+          onDelayChange={onDelayChange}
+          onClose={() => setPropertiesTargets(null)}
+        />
+      )}
 
       {contextMenu !== null && (
         <>
@@ -506,9 +484,20 @@ export default function Grid({
           >
             {contextTargets.length > 1 && (
               <div className="context-menu__label muted">
-                {contextTargets.length} frames
+                {contextTargets.length} frames selected
               </div>
             )}
+            <button
+              type="button"
+              role="menuitem"
+              className="context-menu__item"
+              onClick={() => {
+                setPropertiesTargets(contextTargets);
+                closeContextMenu();
+              }}
+            >
+              Properties
+            </button>
             <button
               type="button"
               role="menuitem"
@@ -519,11 +508,74 @@ export default function Grid({
                 closeContextMenu();
               }}
             >
+              <span className="context-menu__icon"><IconTrash size={13} /></span>
               Delete
             </button>
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+// ——— Frame Properties Modal ————————————————————————————————————————
+
+function FramePropertiesModal({
+  targets,
+  frameDelays,
+  onDelayChange,
+  onClose,
+}: {
+  targets: number[];
+  frameDelays: Record<number, number>;
+  onDelayChange: (idx: number, ms: number) => void;
+  onClose: () => void;
+}) {
+  const values = targets.map((idx) => frameDelays[idx] ?? 0);
+  const allSame = values.every((v) => v === values[0]);
+  const [duration, setDuration] = useState(allSame ? values[0] : 0);
+
+  const handleChange = (val: number) => {
+    setDuration(val);
+    targets.forEach((idx) => onDelayChange(idx, val));
+  };
+
+  return (
+    <div className="modal-scrim" onClick={onClose}>
+      <div className="frame-props-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="frame-props-modal__chrome">
+          <span className="frame-props-modal__title">
+            {targets.length > 1 ? `${targets.length} Frames` : "Frame"} — Properties
+          </span>
+          <button type="button" className="icon-btn" onClick={onClose} title="Close">
+            <IconX size={16} />
+          </button>
+        </div>
+        <div className="frame-props-modal__body">
+          <label className="row">
+            <span>Duration</span>
+            <div className="row__control" style={{ gap: 6 }}>
+              <input
+                type="number"
+                min={0}
+                max={10000}
+                step={100}
+                value={duration}
+                placeholder={!allSame ? "mixed" : undefined}
+                onChange={(e) => handleChange(Math.max(0, Number(e.target.value) || 0))}
+                className="frame-props-modal__input"
+                // eslint-disable-next-line jsx-a11y/no-autofocus
+                autoFocus
+              />
+              <span className="muted">ms</span>
+            </div>
+          </label>
+          <p className="row__hint muted">
+            Extra hold time added to this frame's natural duration in the
+            exported video. 0 = use the recording's fps.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

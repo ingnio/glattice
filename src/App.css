@@ -2442,6 +2442,57 @@ body {
   background: rgba(239, 68, 68, 0.08);
 }
 
+.context-menu__icon {
+  display: inline-flex;
+  vertical-align: middle;
+  margin-right: 7px;
+  opacity: 0.8;
+}
+
+/* ——— Frame Properties modal ——— */
+.frame-props-modal {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  width: 300px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.frame-props-modal__chrome {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.frame-props-modal__title {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.frame-props-modal__body {
+  padding: 14px 16px;
+}
+
+.frame-props-modal__input {
+  width: 80px;
+  background: var(--bg-input, var(--bg-elev));
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 13px;
+  padding: 4px 6px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.frame-props-modal__input:focus {
+  outline: none;
+  border-color: var(--color-accent, #6ea8ff);
+}
+
 .grid-frame__footer {
   display: flex;
   align-items: center;

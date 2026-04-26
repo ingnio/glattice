@@ -47,7 +47,6 @@ interface Props {
   spotlight: SpotlightDraft;
   /** Extra hold time in ms per original frame index. 0 / absent = no hold. */
   frameDelays: Record<number, number>;
-  onDelayChange: (frameIndex: number, extraMs: number) => void;
   compactNavButton?: React.ReactNode;
 }
 
@@ -65,7 +64,6 @@ export default function Player({
   onSaveVideo,
   spotlight,
   frameDelays,
-  onDelayChange,
   compactNavButton,
 }: Props) {
   // Effective trim bounds in ORIGINAL frame indices. When trim is null
@@ -777,22 +775,6 @@ export default function Player({
             </>
           )}
         </div>
-        <label className="player__hold muted" title="Extra hold time for this frame in the exported video">
-          <span>+</span>
-          <input
-            type="number"
-            min={0}
-            max={10000}
-            step={100}
-            value={frameDelays[frameIdx] ?? 0}
-            onChange={(e) =>
-              onDelayChange(frameIdx, Math.max(0, Number(e.target.value) || 0))
-            }
-            className="player__hold-input"
-            disabled={playable.length === 0}
-          />
-          <span>ms</span>
-        </label>
         <div className="player__counter muted">
           {playable.length > 0 ? (
             <>

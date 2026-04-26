@@ -806,7 +806,6 @@ export default function App() {
           onSaveVideo={handleSaveVideo}
           spotlight={prefs.spotlight}
           frameDelays={frameDelays}
-          onDelayChange={updateFrameDelay}
           compactNavButton={compactNavButton}
         />
       )}
@@ -828,6 +827,8 @@ export default function App() {
             const toRemove = new Set(indices);
             setFrameOrder((o) => o.filter((i) => !toRemove.has(i)));
           }}
+          frameDelays={frameDelays}
+          onDelayChange={updateFrameDelay}
           onInsertBlank={handleInsertBlankFrame}
           onPreview={() => setShowPreviewModal(true)}
           onBack={() => setView("player")}
