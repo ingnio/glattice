@@ -47,6 +47,12 @@ interface Props {
   spotlight: SpotlightDraft;
   /** Extra hold time in ms per original frame index. 0 / absent = no hold. */
   frameDelays: Record<number, number>;
+  playing: boolean;
+  onPlayingChange: (p: boolean) => void;
+  loop: "loop" | "boomerang" | "once";
+  onLoopChange: (l: "loop" | "boomerang" | "once") => void;
+  speed: number;
+  onSpeedChange: (s: number) => void;
   compactNavButton?: React.ReactNode;
 }
 
@@ -64,6 +70,12 @@ export default function Player({
   onSaveVideo,
   spotlight,
   frameDelays,
+  playing,
+  onPlayingChange,
+  loop,
+  onLoopChange,
+  speed,
+  onSpeedChange,
   compactNavButton,
 }: Props) {
   // Effective trim bounds in ORIGINAL frame indices. When trim is null
@@ -110,15 +122,12 @@ export default function Player({
   // Current playback position is an ORIGINAL frame index. This way
   // changing the trim or excludes doesn't shift the user's position.
   const [frameIdx, setFrameIdx] = useState<number>(thumbs[0]?.index ?? 0);
-  const [playing, setPlaying] = useState(true);
-  const [loop, setLoop] = useState<"loop" | "boomerang" | "once">("loop");
   const [scrubbing, setScrubbing] = useState(false);
   // Tracks playback direction for boomerang mode: +1 = forward, -1 = backward.
   const directionRef = useRef<1 | -1>(1);
   const [trimDrag, setTrimDrag] = useState<"in" | "out" | null>(null);
   const [saveMenuOpen, setSaveMenuOpen] = useState(false);
   const [ready, setReady] = useState(false);
-  const [speed, setSpeed] = useState(1);
   const [speedMenuOpen, setSpeedMenuOpen] = useState(false);
   const timerRef = useRef<number | null>(null);
   // Mirror of frameIdx accessible inside timeout callbacks without
@@ -301,7 +310,7 @@ export default function Player({
             if (loop === "loop") {
               nextIdx = playableIndices[0];
             } else {
-              setPlaying(false);
+              onPlayingChange(false);
               return; // stay on last frame
             }
           } else {
@@ -324,7 +333,7 @@ export default function Player({
   const step = useCallback(
     (delta: number) => {
       if (playableIndices.length === 0) return;
-      setPlaying(false);
+      onPlayingChange(false);
       setFrameIdx((idx) => {
         let pos = playableIndices.indexOf(idx);
         if (pos < 0) pos = 0;
@@ -337,18 +346,19 @@ export default function Player({
   );
 
   const togglePlay = useCallback(() => {
-    setPlaying((p) => {
-      if (p) return false;
+    if (playing) {
+      onPlayingChange(false);
+    } else {
       const pos = playableIndices.indexOf(frameIdx);
       if (loop === "once" && pos >= playableIndices.length - 1) {
         setFrameIdx(playableIndices[0] ?? frameIdx);
       }
       if (loop === "boomerang") {
-        directionRef.current = 1; // always restart forward
+        directionRef.current = 1;
       }
-      return true;
-    });
-  }, [frameIdx, playableIndices, loop]);
+      onPlayingChange(true);
+    }
+  }, [playing, frameIdx, playableIndices, loop, onPlayingChange]);
 
   // ——— scrubbing helpers ———
   // Map a clientX to a fractional position on the track [0, 1].
@@ -398,7 +408,7 @@ export default function Player({
   const startScrub = useCallback(
     (e: React.MouseEvent) => {
       if (playableIndices.length === 0) return;
-      setPlaying(false);
+      onPlayingChange(false);
       setScrubbing(true);
       const next = playableFrameFromClientX(e.clientX);
       if (next !== null) setFrameIdx(next);
@@ -426,7 +436,7 @@ export default function Player({
     (which: "in" | "out") => (e: React.MouseEvent) => {
       e.stopPropagation();
       if (thumbs.length === 0) return;
-      setPlaying(false);
+      onPlayingChange(false);
       setTrimDrag(which);
     },
     [thumbs.length],
@@ -716,13 +726,11 @@ export default function Player({
         <button
           type="button"
           className={`icon-btn ${loop !== "once" ? "icon-btn--active" : ""}`}
-          onClick={() =>
-            setLoop((l) => {
-              if (l === "loop") return "boomerang";
-              if (l === "boomerang") return "once";
-              return "loop";
-            })
-          }
+          onClick={() => {
+            if (loop === "loop") onLoopChange("boomerang");
+            else if (loop === "boomerang") onLoopChange("once");
+            else onLoopChange("loop");
+          }}
           title={
             loop === "loop"
               ? "Looping — click for boomerang"
@@ -764,7 +772,7 @@ export default function Player({
                     type="button"
                     className={`player__speed-item ${s === speed ? "player__speed-item--active" : ""}`}
                     onClick={() => {
-                      setSpeed(s);
+                      onSpeedChange(s);
                       setSpeedMenuOpen(false);
                     }}
                   >

@@ -83,6 +83,11 @@ export default function App() {
 
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Persisted player state — survive view navigation.
+  const [playerPlaying, setPlayerPlaying] = useState(true);
+  const [playerLoop, setPlayerLoop] = useState<"loop" | "boomerang" | "once">("loop");
+  const [playerSpeed, setPlayerSpeed] = useState(1);
   // Countdown remaining (seconds) before recording actually starts, or
   // null when no countdown is in progress. Surfaces a full-viewport
   // overlay during the wait so the user knows what's happening.
@@ -248,6 +253,9 @@ export default function App() {
       setFrameOrder(thumbList.map((t) => t.index));
       setEdits({});
       setFrameDelays({});
+      setPlayerPlaying(true);
+      setPlayerLoop("loop");
+      setPlayerSpeed(1);
       setTrim(null);
       try {
         setInputEvents(await api.listInputEvents());
@@ -806,6 +814,12 @@ export default function App() {
           onSaveVideo={handleSaveVideo}
           spotlight={prefs.spotlight}
           frameDelays={frameDelays}
+          playing={playerPlaying}
+          onPlayingChange={setPlayerPlaying}
+          loop={playerLoop}
+          onLoopChange={setPlayerLoop}
+          speed={playerSpeed}
+          onSpeedChange={setPlayerSpeed}
           compactNavButton={compactNavButton}
         />
       )}
