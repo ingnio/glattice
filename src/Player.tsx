@@ -95,6 +95,15 @@ export default function Player({
     return m;
   }, [thumbs]);
 
+  // Position (0-based array index) for each original frame index. Used
+  // for all scrubber percentage calculations so reordered / inserted
+  // frames with non-contiguous original indices track correctly.
+  const thumbPosByIdx = useMemo(() => {
+    const m = new Map<number, number>();
+    thumbs.forEach((t, i) => m.set(t.index, i));
+    return m;
+  }, [thumbs]);
+
   // Current playback position is an ORIGINAL frame index. This way
   // changing the trim or excludes doesn't shift the user's position.
   const [frameIdx, setFrameIdx] = useState<number>(thumbs[0]?.index ?? 0);
@@ -339,11 +348,12 @@ export default function Player({
     (clientX: number): number | null => {
       if (playableIndices.length === 0 || thumbs.length === 0) return null;
       const pct = pctFromClientX(clientX);
-      const targetIdx = Math.round(pct * (thumbs.length - 1));
+      const targetPos = Math.round(pct * (thumbs.length - 1));
       let best = playableIndices[0];
       let bestDist = Infinity;
       for (const idx of playableIndices) {
-        const d = Math.abs(idx - targetIdx);
+        const pos = thumbPosByIdx.get(idx) ?? 0;
+        const d = Math.abs(pos - targetPos);
         if (d < bestDist) {
           bestDist = d;
           best = idx;
@@ -351,7 +361,7 @@ export default function Player({
       }
       return best;
     },
-    [playableIndices, thumbs.length, pctFromClientX],
+    [playableIndices, thumbs.length, pctFromClientX, thumbPosByIdx],
   );
 
   // Map a clientX to a raw original frame index, no playability snap.
@@ -479,10 +489,24 @@ export default function Player({
   }, [step, onBack, togglePlay, setTrimToCurrent, clearTrim, trimActive]);
 
   // ——— derived percentages for rendering ———
+  // All positions are array-based (0 … length-1), not original frame
+  // indices, so reordered / inserted frames track correctly.
   const denom = Math.max(1, thumbs.length - 1);
-  const currentPct = thumbs.length > 0 ? (frameIdx / denom) * 100 : 0;
-  const inPct = thumbs.length > 0 ? (trimIn / denom) * 100 : 0;
-  const outPct = thumbs.length > 0 ? (trimOut / denom) * 100 : 100;
+  const currentPos = thumbPosByIdx.get(frameIdx) ?? 0;
+  const currentPct = thumbs.length > 0 ? (currentPos / denom) * 100 : 0;
+  const inPct = (() => {
+    if (!trimActive) return 0;
+    const pos = thumbs.findIndex((t) => t.index >= trimIn);
+    return pos < 0 ? 0 : (pos / denom) * 100;
+  })();
+  const outPct = (() => {
+    if (!trimActive) return 100;
+    let last = thumbs.length - 1;
+    for (let i = thumbs.length - 1; i >= 0; i--) {
+      if (thumbs[i].index <= trimOut) { last = i; break; }
+    }
+    return (last / denom) * 100;
+  })();
 
   const counterPos =
     playableIndices.indexOf(frameIdx) < 0
