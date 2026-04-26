@@ -8,7 +8,7 @@ import {
   drawSpotlight,
   paintEdit,
 } from "./lib/paintEdits";
-import { SpotlightDraft } from "./lib/prefs";
+import type { SpotlightDraft } from "./lib/prefs";
 import { useCtrlWheelZoom } from "./lib/useCtrlWheelZoom";
 import {
   IconBoomerang,
@@ -20,7 +20,6 @@ import {
   IconPlay,
   IconPrev,
   IconSave,
-  IconSpotlight,
   IconX,
 } from "./icons";
 
@@ -46,7 +45,6 @@ interface Props {
   onSaveGif: () => void;
   onSaveVideo: (format: "mp4" | "webm") => void;
   spotlight: SpotlightDraft;
-  onSpotlightChange: (update: Partial<SpotlightDraft>) => void;
   compactNavButton?: React.ReactNode;
 }
 
@@ -63,7 +61,6 @@ export default function Player({
   onSaveGif,
   onSaveVideo,
   spotlight,
-  onSpotlightChange,
   compactNavButton,
 }: Props) {
   // Effective trim bounds in ORIGINAL frame indices. When trim is null
@@ -496,14 +493,6 @@ export default function Player({
           </span>
         </div>
         <div className="player__chrome-right">
-          <button
-            type="button"
-            className={`icon-btn ${spotlight.enabled ? "icon-btn--active" : ""}`}
-            onClick={() => onSpotlightChange({ enabled: !spotlight.enabled })}
-            title="Spotlight mode — dim outside the cursor"
-          >
-            <IconSpotlight size={18} active={spotlight.enabled} />
-          </button>
           <div className="player__save">
             <button
               type="button"
@@ -559,31 +548,6 @@ export default function Player({
           {compactNavButton}
         </div>
       </div>
-
-      {spotlight.enabled && (
-        <div className="player__spotlight-props">
-          <span className="muted">Radius</span>
-          <input
-            type="range"
-            min={50}
-            max={700}
-            step={10}
-            value={spotlight.radius}
-            onChange={(e) => onSpotlightChange({ radius: Number(e.target.value) })}
-          />
-          <span className="player__spotlight-val muted">{spotlight.radius}px</span>
-          <span className="muted" style={{ marginLeft: 12 }}>Dim</span>
-          <input
-            type="range"
-            min={0}
-            max={100}
-            step={5}
-            value={Math.round(spotlight.dimOpacity * 100)}
-            onChange={(e) => onSpotlightChange({ dimOpacity: Number(e.target.value) / 100 })}
-          />
-          <span className="player__spotlight-val muted">{Math.round(spotlight.dimOpacity * 100)}%</span>
-        </div>
-      )}
 
       <div className="player__stage" ref={stageRef}>
         {playable.length === 0 ? (

@@ -780,7 +780,6 @@ export default function App() {
           onSaveGif={handleSaveGif}
           onSaveVideo={handleSaveVideo}
           spotlight={prefs.spotlight}
-          onSpotlightChange={updateSpotlight}
           compactNavButton={compactNavButton}
         />
       )}
@@ -802,6 +801,7 @@ export default function App() {
             const toRemove = new Set(indices);
             setFrameOrder((o) => o.filter((i) => !toRemove.has(i)));
           }}
+          onSpotlightChange={updateSpotlight}
           onPreview={() => setShowPreviewModal(true)}
           compactNavButton={compactNavButton}
         />
