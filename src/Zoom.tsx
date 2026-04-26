@@ -27,6 +27,7 @@ import {
   IconPrev,
   IconRectTool,
   IconSave,
+  IconSpotlight,
   IconSimplify,
   IconText,
   IconTrash,
@@ -40,6 +41,7 @@ interface Props {
   inputEvents: InputEvent[];
   simplify: SimplifyDraft;
   spotlight: SpotlightDraft;
+  onSpotlightChange: (update: Partial<SpotlightDraft>) => void;
   onBack: () => void;
   onNavigate: (index: number) => void;
   onDelete: (index: number) => void;
@@ -55,6 +57,7 @@ export default function Zoom({
   inputEvents,
   simplify,
   spotlight,
+  onSpotlightChange,
   onBack,
   onNavigate,
   onDelete,
@@ -912,6 +915,15 @@ export default function Zoom({
           <span className="zoom__bar__sep" />
           <button
             type="button"
+            className={`icon-btn ${spotlight.enabled ? "icon-btn--active" : ""}`}
+            onClick={() => onSpotlightChange({ enabled: !spotlight.enabled })}
+            title="Spotlight — dim outside cursor"
+          >
+            <IconSpotlight size={18} active={spotlight.enabled} />
+          </button>
+          <span className="zoom__bar__sep" />
+          <button
+            type="button"
             className="icon-btn"
             onClick={() => onDelete(current.index)}
             title="Delete frame"
@@ -932,7 +944,7 @@ export default function Zoom({
         </div>
       </div>
 
-      {(hasColor || hasThickness || hasStrength || hasSimplify) && (
+      {(hasColor || hasThickness || hasStrength || hasSimplify || spotlight.enabled) && (
         <div className="editor-props">
           {hasColor && (
             <div className="editor-bar__group">
@@ -961,6 +973,12 @@ export default function Zoom({
               <CompactSlider label="Merge" value={displayedMerge} min={0} max={16} step={1} onChange={(v) => onCompactSliderChange("merge", v)} title="Horizontal merge radius" />
               <CompactSlider label="Padding" value={displayedPadding} min={0} max={8} step={0.25} onChange={(v) => onCompactSliderChange("padding", v)} title="Bbox padding" />
               <CompactSlider label="Roundness" value={displayedRoundness} min={0} max={32} step={1} onChange={(v) => onCompactSliderChange("roundness", v)} title="Corner radius" />
+            </div>
+          )}
+          {spotlight.enabled && (
+            <div className="simplify-sliders">
+              <CompactSlider label="Radius" value={spotlight.radius} min={0} max={200} step={5} onChange={(v) => onSpotlightChange({ radius: v })} title="Spotlight radius in source pixels" />
+              <CompactSlider label="Dim" value={Math.round(spotlight.dimOpacity * 100)} min={0} max={100} step={5} onChange={(v) => onSpotlightChange({ dimOpacity: v / 100 })} title="Darkness outside spotlight (%)" />
             </div>
           )}
         </div>

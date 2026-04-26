@@ -19,7 +19,6 @@ interface Props {
   onZoom: (index: number) => void;
   onReorder: (newOrder: number[]) => void;
   onDelete: (indices: number[]) => void;
-  onSpotlightChange: (update: Partial<SpotlightDraft>) => void;
   onPreview: () => void;
   compactNavButton?: React.ReactNode;
 }
@@ -37,7 +36,6 @@ export default function Grid({
   onZoom,
   onReorder,
   onDelete,
-  onSpotlightChange,
   onPreview,
   compactNavButton,
 }: Props) {
@@ -287,40 +285,6 @@ export default function Grid({
           >
             Transparent
           </button>
-        </div>
-
-        <span className="sheet-view__sep" />
-
-        <div className="sheet-view__group">
-          <button
-            type="button"
-            className={`chip ${spotlight.enabled ? "chip--active" : ""}`}
-            onClick={() => onSpotlightChange({ enabled: !spotlight.enabled })}
-            title="Spotlight — dim outside cursor"
-          >
-            Spotlight
-          </button>
-          {spotlight.enabled && (
-            <>
-              <span className="muted" style={{ fontSize: 11 }}>R</span>
-              <input
-                type="range" min={0} max={200} step={5} value={spotlight.radius}
-                onChange={(e) => onSpotlightChange({ radius: Number(e.target.value) })}
-                className="sheet-bar__range"
-                title="Spotlight radius (px)"
-              />
-              <span className="muted sheet-bar__val">{spotlight.radius}px</span>
-              <span className="muted" style={{ fontSize: 11, marginLeft: 4 }}>Dim</span>
-              <input
-                type="range" min={0} max={100} step={5}
-                value={Math.round(spotlight.dimOpacity * 100)}
-                onChange={(e) => onSpotlightChange({ dimOpacity: Number(e.target.value) / 100 })}
-                className="sheet-bar__range"
-                title="Spotlight darkness (%)"
-              />
-              <span className="muted sheet-bar__val">{Math.round(spotlight.dimOpacity * 100)}%</span>
-            </>
-          )}
         </div>
 
         <span className="sheet-view__sep" />

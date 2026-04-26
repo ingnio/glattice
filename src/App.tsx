@@ -801,7 +801,6 @@ export default function App() {
             const toRemove = new Set(indices);
             setFrameOrder((o) => o.filter((i) => !toRemove.has(i)));
           }}
-          onSpotlightChange={updateSpotlight}
           onPreview={() => setShowPreviewModal(true)}
           compactNavButton={compactNavButton}
         />
@@ -815,6 +814,7 @@ export default function App() {
           inputEvents={inputEvents}
           simplify={prefs.simplify}
           spotlight={prefs.spotlight}
+          onSpotlightChange={updateSpotlight}
           onBack={() => setView("grid")}
           onNavigate={setZoomIndex}
           onDelete={(idx) => setFrameOrder((o) => o.filter((i) => i !== idx))}
