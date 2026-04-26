@@ -792,6 +792,23 @@ fn precapture_overlay_bg(app: tauri::AppHandle) -> AppResult<()> {
             .ok()
             .flatten()
             .or_else(|| *state.monitor_index.lock());
+
+        // Hide the recording-indicator window before capturing so its
+        // dashed region border doesn't appear in the backdrop screenshot.
+        // The hide + 100 ms pause run entirely on this rayon thread and
+        // don't block the main thread.
+        let indicator_was_visible = app_bg
+            .get_webview_window("indicator")
+            .and_then(|w| {
+                let visible = w.is_visible().ok()?;
+                if visible { w.hide().ok()?; }
+                Some(visible)
+            })
+            .unwrap_or(false);
+        if indicator_was_visible {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+
         let monitor = match capture::pick_monitor(monitor_idx) {
             Ok(m) => m,
             Err(e) => {
@@ -818,6 +835,13 @@ fn precapture_overlay_bg(app: tauri::AppHandle) -> AppResult<()> {
             "[precapture_overlay_bg] done monitor={monitor_idx:?} in {:?}",
             t0.elapsed()
         );
+
+        // Restore the indicator now that the screenshot is safely on disk.
+        if indicator_was_visible {
+            if let Some(w) = app_bg.get_webview_window("indicator") {
+                let _ = w.show();
+            }
+        }
     });
     Ok(())
 }
