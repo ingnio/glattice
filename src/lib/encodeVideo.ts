@@ -23,7 +23,6 @@ export type VideoFormat = "mp4" | "webm";
 
 export interface EncodeOptions {
   thumbs: FrameThumb[];
-  excluded: Set<number>;
   trim: { inIdx: number; outIdx: number } | null;
   edits: FrameEdits;
   inputEvents: InputEvent[];
@@ -41,13 +40,11 @@ export interface EncodeOptions {
 
 /** Encode the recording into a self-contained MP4 / WebM byte buffer. */
 export async function encodeVideo(opts: EncodeOptions): Promise<Uint8Array> {
-  const { thumbs, excluded, trim, edits, inputEvents, fps, format, audioPath, spotlight } =
+  const { thumbs, trim, edits, inputEvents, fps, format, audioPath, spotlight } =
     opts;
 
   const playable = thumbs.filter(
-    (t) =>
-      !excluded.has(t.index) &&
-      (trim === null || (t.index >= trim.inIdx && t.index <= trim.outIdx)),
+    (t) => trim === null || (t.index >= trim.inIdx && t.index <= trim.outIdx),
   );
   if (playable.length === 0) {
     throw new Error("Nothing to encode — no frames in the current selection.");

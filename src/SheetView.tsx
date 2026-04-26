@@ -6,6 +6,8 @@ import { listen } from "@tauri-apps/api/event";
 import { api, convertFileSrc, SheetConfig, SheetInfo } from "./lib/tauri";
 import { FrameEdits } from "./lib/edits";
 import { AnnotationPos, SheetDraft, SpotlightDraft } from "./lib/prefs";
+// SheetView is superseded by SheetPreviewModal + Grid sheet toolbar.
+// Kept for reference; no longer rendered.
 import { buildSheetConfig, SheetFormat } from "./lib/sheetConfig";
 import { IconSave } from "./icons";
 
@@ -126,7 +128,7 @@ export default function SheetView({
     setError(null);
     try {
       const info = await composeOnce(
-        buildSheetConfig(sheet, excluded, frameOrder, edits, trim, "png", spotlight),
+        buildSheetConfig(sheet, frameOrder, edits, trim, "png", spotlight),
       );
       setPreview(info);
     } catch (e) {
@@ -134,7 +136,7 @@ export default function SheetView({
     } finally {
       setBusy(null);
     }
-  }, [sheet, excluded, frameOrder, edits, trim, spotlight]);
+  }, [sheet, frameOrder, edits, trim, spotlight]);
 
   // Auto-regenerate the preview whenever the config changes, debounced
   // so dragging a slider doesn't fire a compose per-pixel.
@@ -177,15 +179,7 @@ export default function SheetView({
         format === "png" && preview
           ? preview
           : await composeOnce(
-              buildSheetConfig(
-                sheet,
-                excluded,
-                frameOrder,
-                edits,
-                trim,
-                format,
-                spotlight,
-              ),
+              buildSheetConfig(sheet, frameOrder, edits, trim, format, spotlight),
             );
       await copyFile(source.path, target);
     } catch (e) {
@@ -193,7 +187,7 @@ export default function SheetView({
     } finally {
       setBusy(null);
     }
-  }, [defaultDir, preview, sheet, excluded, frameOrder, edits, trim, spotlight]);
+  }, [defaultDir, preview, sheet, frameOrder, edits, trim, spotlight]);
 
   return (
     <div className="sheet-view">

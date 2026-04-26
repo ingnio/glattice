@@ -9,8 +9,7 @@ import Config from "./Config";
 import Player from "./Player";
 import Grid from "./Grid";
 import Zoom from "./Zoom";
-import SheetView from "./SheetView";
-import { buildSheetConfig } from "./lib/sheetConfig";
+import SheetPreviewModal from "./SheetPreviewModal";
 import {
   api,
   FrameThumb,
@@ -19,7 +18,6 @@ import {
   PrevWindow,
   RecordingInfo,
   RegionInput,
-  SheetInfo,
 } from "./lib/tauri";
 import { encodeVideo, VideoFormat } from "./lib/encodeVideo";
 import { FrameEdits } from "./lib/edits";
@@ -38,13 +36,13 @@ import {
   Theme,
 } from "./lib/prefs";
 import "./App.css";
-import { IconEye, IconGrid, IconHome, IconImage, IconMore, IconPlay } from "./icons";
+import { IconGrid, IconHome, IconImage, IconMore, IconPlay } from "./icons";
 
 type Source =
   | { kind: "recording"; info: RecordingInfo }
   | { kind: "gif"; info: GifInfo };
 
-type View = "home" | "config" | "player" | "grid" | "zoom" | "sheet";
+type View = "home" | "config" | "player" | "grid" | "zoom";
 
 export default function App() {
   const [view, setView] = useState<View>("home");
@@ -60,17 +58,13 @@ export default function App() {
   const [elapsedMs, setElapsedMs] = useState<number>(0);
 
   const [source, setSource] = useState<Source | null>(null);
-  // Latest composed sheet preview, lifted up so the window sizer can
-  // resize the sheet view to match the actual sheet dimensions
-  // (which differ from the source frame size). Reset on source swap.
-  const [sheetPreview, setSheetPreview] = useState<SheetInfo | null>(null);
   const [compactNavOpen, setCompactNavOpen] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [thumbs, setThumbs] = useState<FrameThumb[]>([]);
   const [playerFrames, setPlayerFrames] = useState<FrameThumb[]>([]);
   // User-controlled display order: an array of original frame indices.
   // Initialised to [0, 1, 2, …] on load; drag-to-reorder updates it.
   const [frameOrder, setFrameOrder] = useState<number[]>([]);
-  const [excluded, setExcluded] = useState<Set<number>>(new Set());
   const [edits, setEdits] = useState<FrameEdits>({});
   const [inputEvents, setInputEvents] = useState<InputEvent[]>([]);
   // Player in/out trim (inclusive original frame indices). null = no
@@ -86,7 +80,6 @@ export default function App() {
   const [regionPrep, setRegionPrep] = useState<boolean>(false);
 
   const [busy, setBusy] = useState<string | null>(null);
-  const [savingSheet, setSavingSheet] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   // Countdown remaining (seconds) before recording actually starts, or
   // null when no countdown is in progress. Surfaces a full-viewport
@@ -191,27 +184,6 @@ export default function App() {
         Math.min(maxH, Math.round(logicalH + PLAYER_CHROME_H)),
       );
       target = new LogicalSize(w, h);
-    } else if (view === "sheet" && sheetPreview) {
-      // Sheet view sizes to the *composed sheet* dimensions, not the
-      // source-frame dimensions — a 4×4 grid of 800×600 frames is a
-      // very different shape than a single capture. We wait for the
-      // first preview to arrive before resizing; until then the
-      // window keeps whatever size Grid handed off.
-      const SHEET_MIN: [number, number] = [520, 460];
-      const SHEET_CHROME_W = 32;
-      const SHEET_CHROME_H = 220;
-      const dpr = window.devicePixelRatio || 1;
-      const logicalW = sheetPreview.width / dpr;
-      const logicalH = sheetPreview.height / dpr;
-      const w = Math.max(
-        SHEET_MIN[0],
-        Math.min(maxW, Math.round(logicalW + SHEET_CHROME_W)),
-      );
-      const h = Math.max(
-        SHEET_MIN[1],
-        Math.min(maxH, Math.round(logicalH + SHEET_CHROME_H)),
-      );
-      target = new LogicalSize(w, h);
     }
 
     if (target) {
@@ -219,7 +191,7 @@ export default function App() {
         .setSize(target)
         .catch(() => {});
     }
-  }, [prefsLoaded, prefs.compactUi, view, source, sheetPreview]);
+  }, [prefsLoaded, prefs.compactUi, view, source]);
 
   const updatePrefs = useCallback((update: Partial<Preferences>) => {
     setPrefs((p) => ({ ...p, ...update }));
@@ -262,7 +234,6 @@ export default function App() {
       setThumbs(thumbList);
       setPlayerFrames(playerList);
       setFrameOrder(thumbList.map((t) => t.index));
-      setExcluded(new Set());
       setEdits({});
       setTrim(null);
       try {
@@ -274,7 +245,6 @@ export default function App() {
     } catch {
       setThumbs([]);
       setPlayerFrames([]);
-      setExcluded(new Set());
       setEdits({});
       setTrim(null);
       setInputEvents([]);
@@ -615,7 +585,6 @@ export default function App() {
       try {
         const bytes = await encodeVideo({
           thumbs: playerThumbs,
-          excluded,
           trim,
           edits,
           inputEvents,
@@ -637,7 +606,6 @@ export default function App() {
     [
       orderedThumbs,
       orderedPlayerFrames,
-      excluded,
       trim,
       edits,
       inputEvents,
@@ -664,52 +632,16 @@ export default function App() {
     }
   }, [source, prefs.defaultSaveDir]);
 
-  const handleQuickSaveSheet = useCallback(async () => {
-    if (thumbs.length === 0) return;
-    setSavingSheet(true);
-    setError(null);
 
-    const ready = new Promise<SheetInfo>((resolve, reject) => {
-      let r: (() => void) | null = null;
-      let e: (() => void) | null = null;
-      const clean = () => {
-        r?.();
-        e?.();
-      };
-      listen<SheetInfo>("sheet-ready", (event) => {
-        clean();
-        resolve(event.payload);
-      }).then((fn) => {
-        r = fn;
-      });
-      listen<{ message: string }>("sheet-error", (event) => {
-        clean();
-        reject(new Error(event.payload.message));
-      }).then((fn) => {
-        e = fn;
-      });
-    });
+  const deletedIndices = useMemo(() => {
+    const inOrder = new Set(frameOrder);
+    return thumbs.filter((t) => !inOrder.has(t.index)).map((t) => t.index);
+  }, [thumbs, frameOrder]);
 
-    try {
-      await api.generateSpriteSheet(
-        buildSheetConfig(prefs.sheet, excluded, frameOrder, edits, trim, "png", prefs.spotlight),
-      );
-      const info = await ready;
-      const ext = info.mime.split("/")[1] ?? "png";
-      const target = await saveDialog({
-        defaultPath: prefs.defaultSaveDir
-          ? `${prefs.defaultSaveDir.replace(/[/\\]+$/, "")}/sprite-sheet.${ext}`
-          : `sprite-sheet.${ext}`,
-        filters: [{ name: "Image", extensions: [ext] }],
-      });
-      if (!target) return;
-      await copyFile(info.path, target);
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setSavingSheet(false);
-    }
-  }, [prefs.sheet, prefs.defaultSaveDir, excluded, frameOrder, edits, trim]);
+  const handleRestore = useCallback((index: number) => {
+    setFrameOrder((o) => [...o, index]);
+    setEdits((e) => { const next = { ...e }; delete next[index]; return next; });
+  }, []);
 
   const handleClearRegion = useCallback(async () => {
     try {
@@ -721,21 +653,6 @@ export default function App() {
     }
   }, []);
 
-  // ——— frame picker helpers ———
-  const toggleFrame = useCallback((index: number) => {
-    setExcluded((prev) => {
-      const next = new Set(prev);
-      if (next.has(index)) next.delete(index);
-      else next.add(index);
-      return next;
-    });
-  }, []);
-
-  const includeAll = useCallback(() => setExcluded(new Set()), []);
-  const excludeAll = useCallback(
-    () => setExcluded(new Set(thumbs.map((t) => t.index))),
-    [thumbs],
-  );
 
   // ——— compact nav ———
   // In compact mode the ⋮ trigger lives inside each view's existing
@@ -846,7 +763,6 @@ export default function App() {
       {view === "player" && (
         <Player
           thumbs={orderedPlayerFrames.length > 0 ? orderedPlayerFrames : orderedThumbs}
-          excluded={excluded}
           edits={edits}
           inputEvents={inputEvents}
           trim={trim}
@@ -872,25 +788,22 @@ export default function App() {
       {view === "grid" && (
         <Grid
           thumbs={orderedThumbs}
-          excluded={excluded}
           edits={edits}
           inputEvents={inputEvents}
-          saving={savingSheet}
           spotlight={prefs.spotlight}
-          onToggle={toggleFrame}
-          compactNavButton={compactNavButton}
-          onZoom={(i) => {
-            setZoomIndex(i);
-            setView("zoom");
-          }}
+          sheet={prefs.sheet}
+          onSheetChange={updateSheet}
+          trim={trim}
+          deletedIndices={deletedIndices}
+          onRestore={handleRestore}
+          onZoom={(i) => { setZoomIndex(i); setView("zoom"); }}
           onReorder={setFrameOrder}
           onDelete={(indices) => {
             const toRemove = new Set(indices);
             setFrameOrder((o) => o.filter((i) => !toRemove.has(i)));
           }}
-          onSelectAll={includeAll}
-          onDeselectAll={excludeAll}
-          onSaveSheet={handleQuickSaveSheet}
+          onPreview={() => setShowPreviewModal(true)}
+          compactNavButton={compactNavButton}
         />
       )}
 
@@ -898,32 +811,28 @@ export default function App() {
         <Zoom
           thumbs={orderedPlayerFrames.length > 0 ? orderedPlayerFrames : orderedThumbs}
           index={zoomIndex}
-          excluded={excluded}
           edits={edits}
           inputEvents={inputEvents}
           simplify={prefs.simplify}
           spotlight={prefs.spotlight}
           onBack={() => setView("grid")}
           onNavigate={setZoomIndex}
-          onToggle={toggleFrame}
+          onDelete={(idx) => setFrameOrder((o) => o.filter((i) => i !== idx))}
           onEditsChange={setEdits}
           onSimplifyChange={updateSimplify}
           compactNavButton={compactNavButton}
         />
       )}
 
-      {view === "sheet" && (
-        <SheetView
+      {showPreviewModal && (
+        <SheetPreviewModal
           sheet={prefs.sheet}
-          onChange={updateSheet}
-          excluded={excluded}
           frameOrder={frameOrder}
           edits={edits}
           trim={trim}
           spotlight={prefs.spotlight}
           defaultDir={prefs.defaultSaveDir}
-          onPreview={setSheetPreview}
-          compactNavButton={compactNavButton}
+          onClose={() => setShowPreviewModal(false)}
         />
       )}
 
@@ -947,7 +856,6 @@ export default function App() {
             setView("zoom");
             setCompactNavOpen(false);
           }}
-          onPreview={() => { if (source) setView("sheet"); setCompactNavOpen(false); }}
         />
       )}
 
@@ -998,16 +906,6 @@ export default function App() {
             <IconImage size={20} />
             <span>Editor</span>
           </button>
-          <button
-            type="button"
-            className={`global-nav__item ${view === "sheet" ? "global-nav__item--active" : ""}`}
-            onClick={() => source && setView("sheet")}
-            disabled={!source}
-            title="Preview"
-          >
-            <IconEye size={20} />
-            <span>Preview</span>
-          </button>
         </nav>
       )}
 
@@ -1028,7 +926,6 @@ interface CompactNavProps {
   onPlayer: () => void;
   onFrames: () => void;
   onEditor: () => void;
-  onPreview: () => void;
 }
 
 function CompactNav({
@@ -1039,14 +936,12 @@ function CompactNav({
   onPlayer,
   onFrames,
   onEditor,
-  onPreview,
 }: CompactNavProps) {
   const items = [
-    { label: "Home",    icon: <IconHome size={16} />,  active: view === "home" || view === "config", disabled: false,      action: onHome },
-    { label: "Player",  icon: <IconPlay size={16} />,  active: view === "player",                    disabled: !hasSource, action: onPlayer },
-    { label: "Frames",  icon: <IconGrid size={16} />,  active: view === "grid",                      disabled: !hasSource, action: onFrames },
-    { label: "Editor",  icon: <IconImage size={16} />, active: view === "zoom",                      disabled: !hasSource, action: onEditor },
-    { label: "Preview", icon: <IconEye size={16} />,   active: view === "sheet",                     disabled: !hasSource, action: onPreview },
+    { label: "Home",   icon: <IconHome size={16} />,  active: view === "home" || view === "config", disabled: false,      action: onHome },
+    { label: "Player", icon: <IconPlay size={16} />,  active: view === "player",                    disabled: !hasSource, action: onPlayer },
+    { label: "Frames", icon: <IconGrid size={16} />,  active: view === "grid",                      disabled: !hasSource, action: onFrames },
+    { label: "Editor", icon: <IconImage size={16} />, active: view === "zoom",                      disabled: !hasSource, action: onEditor },
   ];
 
   return (

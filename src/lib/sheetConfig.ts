@@ -17,7 +17,6 @@ export function hexToRgba(
 
 export function buildSheetConfig(
   sheet: SheetDraft,
-  excluded: Set<number>,
   /** All frame indices in display order (may be user-reordered). */
   orderedIndices: number[],
   edits: FrameEdits,
@@ -25,11 +24,8 @@ export function buildSheetConfig(
   format: SheetFormat = "png",
   spotlight?: SpotlightDraft | null,
 ): SheetConfig {
-  // Preserve display order while filtering excluded + out-of-trim frames.
   const includedIndices = orderedIndices.filter(
-    (i) =>
-      !excluded.has(i) &&
-      (trim === null || (i >= trim.inIdx && i <= trim.outIdx)),
+    (i) => trim === null || (i >= trim.inIdx && i <= trim.outIdx),
   );
   const hasEdits = Object.keys(edits).length > 0;
   return {

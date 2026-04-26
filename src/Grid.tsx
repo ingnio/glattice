@@ -2,64 +2,47 @@ import { useCallback, useEffect, useRef, useState, memo } from "react";
 import { convertFileSrc, FrameThumb, InputEvent } from "./lib/tauri";
 import { FrameEdits, getFrameEdits } from "./lib/edits";
 import { drawClicks, drawCursor, drawKeys, drawSpotlight, paintEdit } from "./lib/paintEdits";
-import { SpotlightDraft } from "./lib/prefs";
-import {
-  IconCheckAll,
-  IconCheckboxChecked,
-  IconCheckboxEmpty,
-  IconExcludeAll,
-  IconSave,
-  IconX,
-} from "./icons";
+import { AnnotationPos, SheetDraft, SpotlightDraft } from "./lib/prefs";
+import { IconEye, IconTrash, IconX } from "./icons";
 
 interface Props {
   thumbs: FrameThumb[];
-  excluded: Set<number>;
-  /** Per-frame vector edits. Painted on each thumbnail so the grid
-   *  matches what the player and exports produce. */
   edits: FrameEdits;
-  /** Click + key events captured during recording. */
   inputEvents: InputEvent[];
-  /** Spotlight vignette — applied on each thumbnail when enabled. */
   spotlight: SpotlightDraft;
-  saving: boolean;
-  onToggle: (index: number) => void;
+  sheet: SheetDraft;
+  onSheetChange: (update: Partial<SheetDraft>) => void;
+  trim: { inIdx: number; outIdx: number } | null;
+  /** Original indices no longer in frameOrder (deleted frames). */
+  deletedIndices: number[];
+  onRestore: (index: number) => void;
   onZoom: (index: number) => void;
-  /** Emit new frameOrder (array of original indices in display order). */
   onReorder: (newOrder: number[]) => void;
-  /** Permanently remove frames from the display order and all exports. */
   onDelete: (indices: number[]) => void;
-  onSelectAll: () => void;
-  onDeselectAll: () => void;
-  onSaveSheet: () => void;
+  onPreview: () => void;
   compactNavButton?: React.ReactNode;
 }
 
 export default function Grid({
   thumbs,
-  excluded,
   edits,
   inputEvents,
   spotlight,
-  saving,
-  onToggle,
+  sheet,
+  onSheetChange,
+  trim,
+  deletedIndices,
+  onRestore,
   onZoom,
   onReorder,
   onDelete,
-  onSelectAll,
-  onDeselectAll,
-  onSaveSheet,
+  onPreview,
   compactNavButton,
 }: Props) {
-  const includedCount = thumbs.length - excluded.size;
-
-  // ——— selection state ———
-  // selectedSet holds original frame indices (not positions). Positions
-  // shift on reorder; indices are stable identifiers.
+  // ——— selection ———
   const [selectedSet, setSelectedSet] = useState<Set<number>>(new Set());
-  // Last-clicked position (not index) so shift-click range anchors correctly
-  // after drag-reorders that change positions.
   const lastClickedPosRef = useRef<number | null>(null);
+  const [restoreOpen, setRestoreOpen] = useState(false);
 
   const handleFrameClick = useCallback(
     (pos: number, originalIdx: number, e: React.MouseEvent) => {
@@ -75,7 +58,6 @@ export default function Grid({
         const lo = Math.min(lastClickedPosRef.current, pos);
         const hi = Math.max(lastClickedPosRef.current, pos);
         setSelectedSet(new Set(thumbs.slice(lo, hi + 1).map((t) => t.index)));
-        // anchor stays at lastClickedPosRef for further shift-clicks
       } else {
         setSelectedSet(new Set([originalIdx]));
         lastClickedPosRef.current = pos;
@@ -84,7 +66,6 @@ export default function Grid({
     [thumbs],
   );
 
-  // Delete / Backspace removes all selected frames.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Delete" && e.key !== "Backspace") return;
@@ -99,15 +80,10 @@ export default function Grid({
     return () => window.removeEventListener("keydown", onKey);
   }, [selectedSet, onDelete]);
 
-  // ——— pointer-based reorder ———
-  // HTML5 DnD is intercepted by WebView2's native file-drop handler when
-  // dragDropEnabled=true (needed for GIF drop into Home). Pointer events
-  // bypass that entirely and work reliably inside the webview.
+  // ——— drag-to-reorder ———
   const gridRef = useRef<HTMLDivElement | null>(null);
   const dragSrcRef = useRef<number | null>(null);
   const startPtRef = useRef<{ x: number; y: number } | null>(null);
-  // Set to true once the pointer moves past the drag deadzone so the
-  // onClick handler can distinguish a drag-release from a plain click.
   const didDragRef = useRef(false);
   const [dragSrcPos, setDragSrcPos] = useState<number | null>(null);
   const [dropPos, setDropPos] = useState<number | null>(null);
@@ -117,8 +93,7 @@ export default function Grid({
       if (src === dst) return;
       const order = thumbs.map((t) => t.index);
       const [moved] = order.splice(src, 1);
-      const insertAt = src < dst ? dst - 1 : dst;
-      order.splice(insertAt, 0, moved);
+      order.splice(src < dst ? dst - 1 : dst, 0, moved);
       onReorder(order);
     },
     [thumbs, onReorder],
@@ -131,70 +106,211 @@ export default function Grid({
     setDropPos(null);
   }, []);
 
-  const insertionIdxAt = useCallback(
-    (clientX: number, clientY: number): number | null => {
-      const grid = gridRef.current;
-      if (!grid) return null;
-      const cards = grid.querySelectorAll<HTMLElement>(".grid-frame");
-      for (let i = 0; i < cards.length; i++) {
-        const r = cards[i].getBoundingClientRect();
-        if (
-          clientX >= r.left &&
-          clientX < r.right &&
-          clientY >= r.top &&
-          clientY < r.bottom
-        ) {
-          return clientX < r.left + r.width / 2 ? i : i + 1;
-        }
+  const insertionIdxAt = useCallback((clientX: number, clientY: number): number | null => {
+    const grid = gridRef.current;
+    if (!grid) return null;
+    const cards = grid.querySelectorAll<HTMLElement>(".grid-frame");
+    for (let i = 0; i < cards.length; i++) {
+      const r = cards[i].getBoundingClientRect();
+      if (clientX >= r.left && clientX < r.right && clientY >= r.top && clientY < r.bottom) {
+        return clientX < r.left + r.width / 2 ? i : i + 1;
       }
-      return null;
-    },
-    [],
-  );
+    }
+    return null;
+  }, []);
+
+  const trimLabel =
+    trim !== null
+      ? ` · trim ${trim.inIdx + 1}–${trim.outIdx + 1}`
+      : "";
 
   return (
     <div className="grid-view">
+      {/* ——— Chrome ——— */}
       <div className="grid-view__chrome">
         <div className="grid-view__title">
           Frames{" "}
           <span className="muted">
-            · {includedCount} / {thumbs.length}
+            · {thumbs.length}{trimLabel}
           </span>
           {selectedSet.size > 0 && (
             <span className="muted"> · {selectedSet.size} selected</span>
           )}
         </div>
         <div className="grid-view__tools">
+          {selectedSet.size > 0 && (
+            <button
+              type="button"
+              className="icon-btn"
+              title={`Delete ${selectedSet.size} frame${selectedSet.size > 1 ? "s" : ""}`}
+              onClick={() => {
+                onDelete([...selectedSet]);
+                setSelectedSet(new Set());
+              }}
+            >
+              <IconTrash size={18} />
+            </button>
+          )}
+          {deletedIndices.length > 0 && (
+            <div className="grid-view__restore-wrap">
+              <button
+                type="button"
+                className={`chip ${restoreOpen ? "chip--active" : ""}`}
+                onClick={() => setRestoreOpen((o) => !o)}
+                title="Restore deleted frames"
+              >
+                {deletedIndices.length} deleted
+              </button>
+              {restoreOpen && (
+                <>
+                  <div
+                    className="grid-view__restore-scrim"
+                    onClick={() => setRestoreOpen(false)}
+                  />
+                  <div className="grid-view__restore-menu">
+                    {[...deletedIndices].sort((a, b) => a - b).map((idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        className="grid-view__restore-item"
+                        onClick={() => {
+                          onRestore(idx);
+                          if (deletedIndices.length === 1) setRestoreOpen(false);
+                        }}
+                      >
+                        Frame {idx + 1}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
           <button
             type="button"
             className="icon-btn"
-            onClick={onSelectAll}
-            title="Include all frames"
+            onClick={onPreview}
+            title="Preview sprite sheet"
           >
-            <IconCheckAll />
-          </button>
-          <button
-            type="button"
-            className="icon-btn"
-            onClick={onDeselectAll}
-            title="Exclude all frames"
-          >
-            <IconExcludeAll />
-          </button>
-          <span className="grid-view__sep" />
-          <button
-            type="button"
-            className={`icon-btn ${saving ? "icon-btn--busy" : ""}`}
-            onClick={onSaveSheet}
-            disabled={includedCount === 0 || saving}
-            title={saving ? "Saving…" : "Save sprite sheet"}
-          >
-            <IconSave />
+            <IconEye size={18} />
           </button>
           {compactNavButton}
         </div>
       </div>
 
+      {/* ——— Sheet settings strip ——— */}
+      <div className="grid-view__sheet-bar">
+        <div className="sheet-view__group">
+          <button
+            type="button"
+            className={`chip ${sheet.columnsMode === "auto" ? "chip--active" : ""}`}
+            onClick={() => onSheetChange({ columnsMode: "auto" })}
+            title="Auto columns"
+          >
+            Auto
+          </button>
+          <button
+            type="button"
+            className={`chip ${sheet.columnsMode === "manual" ? "chip--active" : ""}`}
+            onClick={() => onSheetChange({ columnsMode: "manual" })}
+            title="Manual columns"
+          >
+            Manual
+          </button>
+          {sheet.columnsMode === "manual" && (
+            <input
+              type="number" min={1} max={20} value={sheet.columns}
+              onChange={(e) => onSheetChange({ columns: Math.max(1, Math.min(20, Number(e.target.value) || 1)) })}
+              className="sheet-view__num" title="Columns"
+            />
+          )}
+        </div>
+
+        <span className="sheet-view__sep" />
+
+        <div className="sheet-view__group">
+          <label className="sheet-view__field">
+            <span className="muted">Pad</span>
+            <input
+              type="number" min={0} max={40} value={sheet.padding}
+              onChange={(e) => onSheetChange({ padding: Math.max(0, Math.min(40, Number(e.target.value) || 0)) })}
+              className="sheet-view__num"
+            />
+          </label>
+          <label className="sheet-view__field">
+            <span className="muted">Max-w</span>
+            <input
+              type="number" min={0} placeholder="—" value={sheet.maxWidth ?? ""}
+              onChange={(e) => {
+                const v = e.target.value;
+                onSheetChange({ maxWidth: v === "" ? null : Math.max(0, Number(v) || 0) || null });
+              }}
+              className="sheet-view__num sheet-view__num--wide" title="Max width px"
+            />
+          </label>
+        </div>
+
+        <span className="sheet-view__sep" />
+
+        <div className="sheet-view__group">
+          <input
+            type="color" value={sheet.bgHex} disabled={sheet.bgTransparent}
+            onChange={(e) => onSheetChange({ bgHex: e.target.value })} title="Background color"
+          />
+          <button
+            type="button"
+            className={`chip ${sheet.bgTransparent ? "chip--active" : ""}`}
+            onClick={() => onSheetChange({ bgTransparent: !sheet.bgTransparent })}
+            title="Transparent background"
+          >
+            Transparent
+          </button>
+          <button
+            type="button"
+            className={`chip ${sheet.border ? "chip--active" : ""}`}
+            onClick={() => onSheetChange({ border: !sheet.border })}
+            title="Frame border"
+          >
+            Border
+          </button>
+        </div>
+
+        <span className="sheet-view__sep" />
+
+        <div className="sheet-view__group">
+          <button
+            type="button"
+            className={`chip ${sheet.showFrameNumber ? "chip--active" : ""}`}
+            onClick={() => onSheetChange({ showFrameNumber: !sheet.showFrameNumber })}
+            title="Show frame number"
+          >
+            Frame #
+          </button>
+          <button
+            type="button"
+            className={`chip ${sheet.showTimestamp ? "chip--active" : ""}`}
+            onClick={() => onSheetChange({ showTimestamp: !sheet.showTimestamp })}
+            title="Show timestamp"
+          >
+            Time
+          </button>
+          {(sheet.showFrameNumber || sheet.showTimestamp) && (
+            <select
+              value={sheet.annotationPosition}
+              onChange={(e) => onSheetChange({ annotationPosition: e.target.value as AnnotationPos })}
+              title="Annotation position"
+              className="sheet-view__pos-select"
+            >
+              <option value="top-left">↖</option>
+              <option value="top-right">↗</option>
+              <option value="bottom-left">↙</option>
+              <option value="bottom-right">↘</option>
+            </select>
+          )}
+        </div>
+      </div>
+
+      {/* ——— Grid body ——— */}
       <div
         ref={gridRef}
         className="grid-view__body"
@@ -220,27 +336,21 @@ export default function Grid({
         onPointerLeave={clearDrag}
       >
         {thumbs.map((t, pos) => {
-          const isExcluded = excluded.has(t.index);
           const isSelected = selectedSet.has(t.index);
           const isDragging = dragSrcPos === pos;
           const lineLeft = dropPos === pos && dragSrcPos !== pos;
           const lineRight =
-            pos === thumbs.length - 1 &&
-            dropPos === thumbs.length &&
-            dragSrcPos !== pos;
+            pos === thumbs.length - 1 && dropPos === thumbs.length && dragSrcPos !== pos;
           return (
             <div
               key={t.index}
               className={[
                 "grid-frame",
-                isExcluded ? "grid-frame--excluded" : "",
                 isSelected ? "grid-frame--selected" : "",
                 isDragging ? "grid-frame--dragging" : "",
                 lineLeft ? "grid-frame--line-left" : "",
                 lineRight ? "grid-frame--line-right" : "",
-              ]
-                .filter(Boolean)
-                .join(" ")}
+              ].filter(Boolean).join(" ")}
               onPointerDown={(e) => {
                 if (e.button !== 0) return;
                 const target = e.target as HTMLElement;
@@ -269,26 +379,8 @@ export default function Grid({
                 spotlight={spotlight}
               />
               <div className="grid-frame__footer">
-                <span className="grid-frame__index">
-                  {pos + 1}
-                  {isExcluded && " · excluded"}
-                </span>
+                <span className="grid-frame__index">{pos + 1}</span>
                 <div className="grid-frame__actions">
-                  <button
-                    type="button"
-                    className={`icon-btn icon-btn--xs ${!isExcluded ? "icon-btn--active" : ""}`}
-                    title={isExcluded ? "Include frame" : "Exclude frame"}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onToggle(t.index);
-                    }}
-                  >
-                    {isExcluded ? (
-                      <IconCheckboxEmpty size={14} />
-                    ) : (
-                      <IconCheckboxChecked size={14} />
-                    )}
-                  </button>
                   <button
                     type="button"
                     className="icon-btn icon-btn--xs"
@@ -317,16 +409,6 @@ interface FrameCanvasProps {
   spotlight: SpotlightDraft;
 }
 
-/** Per-thumbnail canvas: paints source PNG → frame edits → cursor →
- *  click rings → keys → spotlight. Matches Player + encodeVideo pipelines
- *  so the grid is a high-fidelity representation of what gets exported.
- *
- *  Two separate effects keep loading and drawing decoupled:
- *  - Effect 1 loads the image once per path change, stores it in state.
- *  - Effect 2 repaints whenever the loaded image OR any overlay changes
- *    (edits, spotlight, cursor, input events). This means edits applied
- *    in the Zoom view appear immediately when the user returns to Grid
- *    without re-fetching the source PNG. */
 const FrameCanvas = memo(function FrameCanvas({
   thumb,
   frameEdits,
@@ -336,29 +418,19 @@ const FrameCanvas = memo(function FrameCanvas({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [loadedImg, setLoadedImg] = useState<HTMLImageElement | null>(null);
 
-  // Load source image. On path change the old image stays rendered until
-  // the new one is ready (no blank flash).
   useEffect(() => {
     const img = new Image();
     img.crossOrigin = "anonymous";
     let cancelled = false;
-    img.onload = () => {
-      if (!cancelled) setLoadedImg(img);
-    };
+    img.onload = () => { if (!cancelled) setLoadedImg(img); };
     img.src = convertFileSrc(thumb.path);
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [thumb.path]);
 
-  // Repaint whenever the image or any overlay changes.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !loadedImg) return;
-    if (
-      canvas.width !== loadedImg.naturalWidth ||
-      canvas.height !== loadedImg.naturalHeight
-    ) {
+    if (canvas.width !== loadedImg.naturalWidth || canvas.height !== loadedImg.naturalHeight) {
       canvas.width = loadedImg.naturalWidth;
       canvas.height = loadedImg.naturalHeight;
     }
@@ -384,3 +456,4 @@ const FrameCanvas = memo(function FrameCanvas({
     />
   );
 });
+

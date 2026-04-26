@@ -33,7 +33,6 @@ export interface TrimRange {
 
 interface Props {
   thumbs: FrameThumb[];
-  excluded: Set<number>;
   edits: FrameEdits;
   inputEvents: InputEvent[];
   trim: TrimRange | null;
@@ -53,7 +52,6 @@ interface Props {
 
 export default function Player({
   thumbs,
-  excluded,
   edits,
   inputEvents,
   trim,
@@ -78,12 +76,8 @@ export default function Player({
   // Frames that actually play. Filtered by both manual excludes and
   // the in/out trim window.
   const playable = useMemo(
-    () =>
-      thumbs.filter(
-        (t) =>
-          !excluded.has(t.index) && t.index >= trimIn && t.index <= trimOut,
-      ),
-    [thumbs, excluded, trimIn, trimOut],
+    () => thumbs.filter((t) => t.index >= trimIn && t.index <= trimOut),
+    [thumbs, trimIn, trimOut],
   );
   const playableIndices = useMemo(
     () => playable.map((t) => t.index),
@@ -498,8 +492,7 @@ export default function Player({
           {sourceLabel}{" "}
           <span className="muted">
             · {playable.length} frame{playable.length === 1 ? "" : "s"}
-            {(excluded.size > 0 || trimActive) &&
-              ` (${thumbs.length - playable.length} hidden)`}
+            {trimActive && ` (${thumbs.length - playable.length} hidden)`}
           </span>
         </div>
         <div className="player__chrome-right">

@@ -26,7 +26,6 @@ import {
   IconPen,
   IconPrev,
   IconRectTool,
-  IconRestore,
   IconSave,
   IconSimplify,
   IconText,
@@ -37,14 +36,13 @@ import {
 interface Props {
   thumbs: FrameThumb[];
   index: number;
-  excluded: Set<number>;
   edits: FrameEdits;
   inputEvents: InputEvent[];
   simplify: SimplifyDraft;
   spotlight: SpotlightDraft;
   onBack: () => void;
   onNavigate: (index: number) => void;
-  onToggle: (index: number) => void;
+  onDelete: (index: number) => void;
   onEditsChange: (edits: FrameEdits) => void;
   onSimplifyChange: (update: Partial<SimplifyDraft>) => void;
   compactNavButton?: React.ReactNode;
@@ -53,21 +51,19 @@ interface Props {
 export default function Zoom({
   thumbs,
   index,
-  excluded,
   edits,
   inputEvents,
   simplify,
   spotlight,
   onBack,
   onNavigate,
-  onToggle,
+  onDelete,
   onEditsChange,
   onSimplifyChange,
   compactNavButton,
 }: Props) {
   const pos = thumbs.findIndex((t) => t.index === index);
   const current = pos >= 0 ? thumbs[pos] : null;
-  const isExcluded = current ? excluded.has(current.index) : false;
 
   const [tool, setTool] = useState<EditTool>("select");
   const [color, setColor] = useState<EditColor>(EDIT_PALETTE[0]);
@@ -171,7 +167,7 @@ export default function Zoom({
           onEditsChange(setFrameEdits(edits, current.index, next));
           setSelectedIdx(null);
         } else if (current) {
-          onToggle(current.index);
+          onDelete(current.index);
         }
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
         if (current && frameEdits.length > 0) {
@@ -190,7 +186,7 @@ export default function Zoom({
     thumbs,
     onBack,
     onNavigate,
-    onToggle,
+    onDelete,
     current,
     drafting,
     edits,
@@ -897,7 +893,6 @@ export default function Zoom({
           <span className="zoom__bar__info">
             <span>Frame {current.index + 1}</span>
             <span className="muted">/ {thumbs.length}</span>
-            {isExcluded && <span className="tag tag--excluded">excluded</span>}
             {frameEdits.length > 0 && (
               <span className="tag tag--edited">
                 {frameEdits.length} edit{frameEdits.length > 1 ? "s" : ""}
@@ -917,11 +912,11 @@ export default function Zoom({
           <span className="zoom__bar__sep" />
           <button
             type="button"
-            className={`icon-btn ${isExcluded ? "icon-btn--active" : ""}`}
-            onClick={() => onToggle(current.index)}
-            title={isExcluded ? "Include frame" : "Exclude frame"}
+            className="icon-btn"
+            onClick={() => onDelete(current.index)}
+            title="Delete frame"
           >
-            {isExcluded ? <IconRestore size={18} /> : <IconTrash size={18} />}
+            <IconTrash size={18} />
           </button>
           <span className="zoom__bar__sep" />
           <button
