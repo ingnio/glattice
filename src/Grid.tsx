@@ -394,6 +394,12 @@ export default function Grid({
           padding: `${Math.max(0, sheet.padding)}px`,
           ...(sheet.maxWidth && sheet.maxWidth > 0 ? { maxWidth: `${sheet.maxWidth}px` } : {}),
         }}
+        onClick={(e) => {
+          if (!(e.target as HTMLElement).closest(".grid-frame")) {
+            setSelectedSet(new Set());
+            lastClickedPosRef.current = null;
+          }
+        }}
         onPointerMove={(e) => {
           if (dragSrcRef.current === null || !startPtRef.current) return;
           const { x, y } = startPtRef.current;
