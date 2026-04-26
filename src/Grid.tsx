@@ -3,7 +3,7 @@ import { convertFileSrc, FrameThumb, InputEvent } from "./lib/tauri";
 import { FrameEdits, getFrameEdits } from "./lib/edits";
 import { drawAnnotation, drawClicks, drawCursor, drawKeys, drawSpotlight, paintEdit } from "./lib/paintEdits";
 import { AnnotationPos, SheetDraft, SpotlightDraft } from "./lib/prefs";
-import { IconEye, IconSpotlight, IconTrash, IconX } from "./icons";
+import { IconEye, IconTrash, IconX } from "./icons";
 
 interface Props {
   thumbs: FrameThumb[];
@@ -294,11 +294,11 @@ export default function Grid({
         <div className="sheet-view__group">
           <button
             type="button"
-            className={`icon-btn icon-btn--xs ${spotlight.enabled ? "icon-btn--active" : ""}`}
+            className={`chip ${spotlight.enabled ? "chip--active" : ""}`}
             onClick={() => onSpotlightChange({ enabled: !spotlight.enabled })}
             title="Spotlight — dim outside cursor"
           >
-            <IconSpotlight size={15} active={spotlight.enabled} />
+            Spotlight
           </button>
           {spotlight.enabled && (
             <>
@@ -411,9 +411,7 @@ export default function Grid({
                 lineLeft ? "grid-frame--line-left" : "",
                 lineRight ? "grid-frame--line-right" : "",
               ].filter(Boolean).join(" ")}
-              style={(sheet.borderWidth ?? 0) > 0
-                ? { boxShadow: `inset 0 0 0 ${sheet.borderWidth}px rgba(200,200,200,0.8)` }
-                : undefined}
+              style={{ '--frame-border-w': `${sheet.borderWidth ?? 0}px` } as React.CSSProperties}
               onPointerDown={(e) => {
                 if (e.button !== 0) return;
                 const target = e.target as HTMLElement;

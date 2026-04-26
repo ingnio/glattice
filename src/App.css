@@ -2266,11 +2266,24 @@ body {
 .grid-frame {
   display: flex;
   flex-direction: column;
+  position: relative;
   border: 2px solid var(--border);
   border-radius: var(--radius-sm);
   overflow: hidden;
   background: var(--bg-elev);
   transition: border-color 120ms, opacity 120ms;
+}
+
+/* Inset border overlay — drawn on top of the canvas so all 4 edges
+   are visible even when the frame image fills the cell completely.
+   Controlled by --frame-border-w set inline from sheet.borderWidth. */
+.grid-frame::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 var(--frame-border-w, 0px) rgba(200, 200, 200, 0.85);
+  z-index: 2;
 }
 
 .grid-frame:hover {
