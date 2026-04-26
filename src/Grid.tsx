@@ -468,9 +468,7 @@ export default function Grid({
                 annotationPosition={sheet.annotationPosition}
                 frameIndex={t.index}
               />
-              <div className="grid-frame__footer">
-                <span className="grid-frame__index">{pos + 1}</span>
-              </div>
+              <span className="grid-frame__index">{pos + 1}</span>
             </div>
           );
         })}

@@ -2501,18 +2501,19 @@ body {
   border-top: 1px solid var(--border);
 }
 
-.grid-frame__footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 6px 8px;
-  gap: 6px;
-  font-size: 11px;
-}
-
 .grid-frame__index {
+  position: absolute;
+  bottom: 5px;
+  left: 5px;
+  font-size: 10px;
   font-variant-numeric: tabular-nums;
-  color: var(--text-dim);
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(0, 0, 0, 0.45);
+  padding: 1px 5px;
+  border-radius: 3px;
+  pointer-events: none;
+  z-index: 3;
+  line-height: 1.6;
 }
 
 .grid-frame--excluded {
