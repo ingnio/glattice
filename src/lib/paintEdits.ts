@@ -306,10 +306,12 @@ export function paintEdit(
   ctx: CanvasRenderingContext2D,
   img: CanvasImageSource,
   e: Edit,
-  opts?: { isDraft?: boolean },
+  opts?: { isDraft?: boolean; imageCache?: Map<string, HTMLImageElement> },
 ): void {
   const stroke = colorToCss(
-    e.kind === "blur" || e.kind === "simplify" ? [0, 0, 0, 255] : e.color,
+    e.kind === "blur" || e.kind === "simplify" || e.kind === "image"
+      ? [0, 0, 0, 255]
+      : e.color,
   );
   switch (e.kind) {
     case "rect": {
@@ -454,6 +456,16 @@ export function paintEdit(
         e.h + e.radius * 2,
       );
       ctx.restore();
+      break;
+    }
+    case "image": {
+      if (e.w < 1 || e.h < 1) break;
+      const cached = opts?.imageCache?.get(e.src);
+      if (cached && cached.naturalWidth > 0) {
+        ctx.save();
+        ctx.drawImage(cached, e.x, e.y, e.w, e.h);
+        ctx.restore();
+      }
       break;
     }
     case "simplify": {

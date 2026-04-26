@@ -160,6 +160,15 @@ export const IconPlus = ({ size = defaults.size }: IconProps) =>
     <line x1="5" y1="12" x2="19" y2="12" />
   </>);
 
+export const IconImageAdd = ({ size = defaults.size }: IconProps) =>
+  svg(size, <>
+    <rect x="3" y="5" width="15" height="13" rx="2" />
+    <circle cx="7.5" cy="9.5" r="1.5" />
+    <polyline points="18 14 13 9 6 16" />
+    <line x1="20" y1="3" x2="20" y2="9" />
+    <line x1="17" y1="6" x2="23" y2="6" />
+  </>);
+
 export const IconInfo = ({ size = defaults.size }: IconProps) =>
   svg(size, <>
     <circle cx="12" cy="12" r="9" />

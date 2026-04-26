@@ -4,7 +4,7 @@
 //!
 //! All coordinates + sizes are in SOURCE-image (frame) pixels.
 
-use image::{imageops, Rgba, RgbaImage};
+use image::{imageops, imageops::FilterType, Rgba, RgbaImage};
 use serde::Deserialize;
 
 use crate::font;
@@ -66,6 +66,20 @@ pub enum Edit {
         w: f32,
         h: f32,
         radius: f32,
+    },
+    #[serde(rename_all = "camelCase")]
+    Image {
+        /// Absolute file-system path to the image file.
+        path: String,
+        /// Browser URL — ignored in Rust (extra field).
+        #[serde(default)]
+        src: String,
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        natural_w: u32,
+        natural_h: u32,
     },
     #[serde(rename_all = "camelCase")]
     Simplify {
@@ -186,6 +200,17 @@ fn apply_edit(img: &mut RgbaImage, edit: &Edit) {
                     shadow,
                     size,
                 );
+            }
+        }
+        Edit::Image { path, x, y, w, h, .. } => {
+            if *w >= 1.0 && *h >= 1.0 {
+                if let Ok(overlay) = image::open(path) {
+                    let overlay_rgba = overlay.to_rgba8();
+                    let tw = w.round().max(1.0) as u32;
+                    let th = h.round().max(1.0) as u32;
+                    let resized = imageops::resize(&overlay_rgba, tw, th, FilterType::Lanczos3);
+                    imageops::overlay(img, &resized, x.round() as i64, y.round() as i64);
+                }
             }
         }
         Edit::Blur { x, y, w, h, radius } => {

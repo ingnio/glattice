@@ -130,10 +130,33 @@ export default function Player({
   const [ready, setReady] = useState(false);
   const [speedMenuOpen, setSpeedMenuOpen] = useState(false);
   const timerRef = useRef<number | null>(null);
-  // Mirror of frameIdx accessible inside timeout callbacks without
-  // stale closure issues.
   const frameIdxRef = useRef(frameIdx);
   frameIdxRef.current = frameIdx;
+
+  const imageCacheRef = useRef<Map<string, HTMLImageElement>>(new Map());
+  const [imageRevision, setImageRevision] = useState(0);
+
+  // Preload image edits for all visible frames when edits change.
+  useEffect(() => {
+    type ImgEdit = Extract<import("./lib/edits").Edit, { kind: "image" }>;
+    const toLoad: ImgEdit[] = [];
+    for (const t of thumbs) {
+      for (const e of getFrameEdits(edits, t.index)) {
+        if (e.kind === "image" && !imageCacheRef.current.has(e.src)) {
+          toLoad.push(e as ImgEdit);
+        }
+      }
+    }
+    if (toLoad.length === 0) return;
+    let done = 0;
+    for (const ie of toLoad) {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => { imageCacheRef.current.set(ie.src, img); if (++done === toLoad.length) setImageRevision((r) => r + 1); };
+      img.onerror = () => { if (++done === toLoad.length) setImageRevision((r) => r + 1); };
+      img.src = ie.src;
+    }
+  }, [thumbs, edits]);
   const trackRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
@@ -250,7 +273,7 @@ export default function Player({
     const thumb = thumbByIdx.get(frameIdx);
     if (thumb) {
       const frameEdits = getFrameEdits(edits, thumb.index);
-      for (const e of frameEdits) paintEdit(ctx, img, e);
+      for (const e of frameEdits) paintEdit(ctx, img, e, { imageCache: imageCacheRef.current });
       if (thumb.cursor) drawCursor(ctx, thumb.cursor.x, thumb.cursor.y);
       if (inputEvents.length > 0) {
         drawClicks(
@@ -272,7 +295,7 @@ export default function Player({
         drawSpotlight(ctx, thumb.cursor.x, thumb.cursor.y, spotlight.radius, spotlight.dimOpacity);
       }
     }
-  }, [frameIdx, ready, edits, thumbByIdx, inputEvents, spotlight]);
+  }, [frameIdx, ready, edits, thumbByIdx, inputEvents, spotlight, imageRevision]);
 
   // ——— playback timer ———
   // Uses a setTimeout chain (not setInterval) so each frame waits

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCtrlWheelZoom } from "./lib/useCtrlWheelZoom";
-import { save as saveDialog } from "@tauri-apps/plugin-dialog";
+import { save as saveDialog, open as openDialog } from "@tauri-apps/plugin-dialog";
 import { writeFile } from "@tauri-apps/plugin-fs";
 import { convertFileSrc, FrameThumb, InputEvent } from "./lib/tauri";
 import {
@@ -25,6 +25,7 @@ import {
   IconNext,
   IconPen,
   IconPrev,
+  IconImageAdd,
   IconRectTool,
   IconSave,
   IconSpotlight,
@@ -81,6 +82,8 @@ export default function Zoom({
   const simplifyRoundness = simplify.roundness;
   const [drafting, setDrafting] = useState<Edit | null>(null);
   const [imgSize, setImgSize] = useState<{ w: number; h: number } | null>(null);
+  const imageCacheRef = useRef<Map<string, HTMLImageElement>>(new Map());
+  const [imageRevision, setImageRevision] = useState(0);
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const [previewEdit, setPreviewEdit] = useState<{
     idx: number;
@@ -262,7 +265,10 @@ export default function Zoom({
     for (let i = 0; i < all.length; i++) {
       if (i === editingTextIdx) continue;
       const isDraft = drafting !== null && i === all.length - 1;
-      paintEdit(ctx, img, all[i], isDraft ? { isDraft: true } : undefined);
+      paintEdit(ctx, img, all[i], {
+        ...(isDraft ? { isDraft: true } : {}),
+        imageCache: imageCacheRef.current,
+      });
     }
 
     // Re-blit the recording cursor on top of any edits so simplify
@@ -316,7 +322,25 @@ export default function Zoom({
     current?.elapsedMs,
     inputEvents,
     spotlight,
+    imageRevision,
   ]);
+
+  // Preload any image edits so the repaint has them synchronously.
+  useEffect(() => {
+    type ImgEdit = Extract<import("./lib/edits").Edit, { kind: "image" }>;
+    const toLoad = (frameEdits as import("./lib/edits").Edit[])
+      .filter((e): e is ImgEdit => e.kind === "image")
+      .filter((e) => !imageCacheRef.current.has(e.src));
+    if (toLoad.length === 0) return;
+    let done = 0;
+    for (const ie of toLoad) {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => { imageCacheRef.current.set(ie.src, img); if (++done === toLoad.length) setImageRevision((r) => r + 1); };
+      img.onerror = () => { if (++done === toLoad.length) setImageRevision((r) => r + 1); };
+      img.src = ie.src;
+    }
+  }, [frameEdits]);
 
   // ——— Coordinate mapping ———
   const toSource = useCallback((evt: React.PointerEvent): { x: number; y: number } => {
@@ -690,6 +714,44 @@ export default function Zoom({
 
   const [saving, setSaving] = useState(false);
 
+  const handleImageUpload = useCallback(async () => {
+    if (!current || !imgSize) return;
+    const selected = await openDialog({
+      multiple: false,
+      filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp"] }],
+    });
+    if (!selected || typeof selected !== "string") return;
+    const src = convertFileSrc(selected);
+
+    const htmlImg = new Image();
+    htmlImg.crossOrigin = "anonymous";
+    await new Promise<void>((resolve) => {
+      htmlImg.onload = () => resolve();
+      htmlImg.onerror = () => resolve();
+      htmlImg.src = src;
+    });
+
+    const naturalW = htmlImg.naturalWidth || 100;
+    const naturalH = htmlImg.naturalHeight || 100;
+
+    // Fit within canvas bounds preserving aspect ratio; never scale up.
+    const scale = Math.min(1, imgSize.w / naturalW, imgSize.h / naturalH);
+    const w = Math.round(naturalW * scale);
+    const h = Math.round(naturalH * scale);
+    const x = Math.round((imgSize.w - w) / 2);
+    const y = Math.round((imgSize.h - h) / 2);
+
+    imageCacheRef.current.set(src, htmlImg);
+
+    const newEdit: import("./lib/edits").Edit = {
+      kind: "image", path: selected, src, x, y, w, h, naturalW, naturalH,
+    };
+    const newIdx = frameEdits.length;
+    commitEdit(newEdit);
+    setSelectedIdx(newIdx);
+    setImageRevision((r) => r + 1);
+  }, [current, imgSize, frameEdits, commitEdit]);
+
   const saveFrame = useCallback(async () => {
     if (!current || !imgSize) return;
     const img = imgRef.current;
@@ -708,7 +770,7 @@ export default function Zoom({
       const offscreen = new OffscreenCanvas(imgSize.w, imgSize.h);
       const ctx = offscreen.getContext("2d") as unknown as CanvasRenderingContext2D;
       ctx.drawImage(img, 0, 0);
-      for (const e of frameEdits) paintEdit(ctx, img, e);
+      for (const e of frameEdits) paintEdit(ctx, img, e, { imageCache: imageCacheRef.current });
       if (current.cursor) drawCursor(ctx, current.cursor.x, current.cursor.y);
       if (inputEvents.length > 0) {
         drawClicks(ctx, inputEvents, current.elapsedMs, imgSize.w, imgSize.h);
@@ -890,6 +952,14 @@ export default function Zoom({
           {toolBtn("text", <IconText size={18} />, "Text")}
           {toolBtn("blur", <IconBlur size={18} />, "Blur region")}
           {toolBtn("simplify", <IconSimplify size={18} />, "Simplify content")}
+          <button
+            type="button"
+            className="editor-tool"
+            title="Insert image"
+            onClick={handleImageUpload}
+          >
+            <IconImageAdd size={18} />
+          </button>
           <button
             type="button"
             className={`editor-tool ${spotlight.enabled ? "is-active" : ""}`}
@@ -1168,6 +1238,7 @@ function handlePoints(
     case "blur":
     case "simplify":
     case "text":
+    case "image":
       return [
         { id: "nw", x: e.x, y: e.y },
         { id: "ne", x: e.x + e.w, y: e.y },
@@ -1202,6 +1273,7 @@ function hitEdit(e: Edit, px: number, py: number, tol: number): boolean {
     case "rect":
     case "blur":
     case "simplify":
+    case "image":
       return (
         px >= e.x - tol &&
         px <= e.x + e.w + tol &&
@@ -1275,7 +1347,8 @@ function applySelectOp(
     original.kind === "ellipse" ||
     original.kind === "blur" ||
     original.kind === "simplify" ||
-    original.kind === "text"
+    original.kind === "text" ||
+    original.kind === "image"
   ) {
     // Pick the corner opposite the dragged handle; that corner stays
     // pinned while the dragged corner tracks the cursor. Dragging past
@@ -1326,6 +1399,7 @@ function translateEdit(e: Edit, dx: number, dy: number): Edit {
     case "ellipse":
     case "blur":
     case "simplify":
+    case "image":
       return { ...e, x: e.x + dx, y: e.y + dy };
     case "arrow":
       return {
@@ -1381,6 +1455,7 @@ function editBBox(e: Edit): { x: number; y: number; w: number; h: number } {
     case "ellipse":
     case "blur":
     case "simplify":
+    case "image":
       return { x: e.x, y: e.y, w: e.w, h: e.h };
     case "arrow": {
       const minX = Math.min(e.x1, e.x2);

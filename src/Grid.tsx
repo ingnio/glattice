@@ -628,6 +628,24 @@ const FrameCanvas = memo(function FrameCanvas({
 }: FrameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [loadedImg, setLoadedImg] = useState<HTMLImageElement | null>(null);
+  const imageCacheRef = useRef<Map<string, HTMLImageElement>>(new Map());
+  const [imageRevision, setImageRevision] = useState(0);
+
+  useEffect(() => {
+    type ImgEdit = Extract<import("./lib/edits").Edit, { kind: "image" }>;
+    const toLoad = (frameEdits as import("./lib/edits").Edit[])
+      .filter((e): e is ImgEdit => e.kind === "image")
+      .filter((e) => !imageCacheRef.current.has(e.src));
+    if (toLoad.length === 0) return;
+    let done = 0;
+    for (const ie of toLoad) {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => { imageCacheRef.current.set(ie.src, img); if (++done === toLoad.length) setImageRevision((r) => r + 1); };
+      img.onerror = () => { if (++done === toLoad.length) setImageRevision((r) => r + 1); };
+      img.src = ie.src;
+    }
+  }, [frameEdits]);
 
   useEffect(() => {
     const img = new Image();
@@ -648,7 +666,7 @@ const FrameCanvas = memo(function FrameCanvas({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.drawImage(loadedImg, 0, 0);
-    for (const e of frameEdits) paintEdit(ctx, loadedImg, e);
+    for (const e of frameEdits) paintEdit(ctx, loadedImg, e, { imageCache: imageCacheRef.current });
     if (thumb.cursor) drawCursor(ctx, thumb.cursor.x, thumb.cursor.y);
     if (inputEvents.length > 0) {
       drawClicks(ctx, inputEvents, thumb.elapsedMs, canvas.width, canvas.height);
@@ -661,7 +679,7 @@ const FrameCanvas = memo(function FrameCanvas({
       drawAnnotation(ctx, frameIndex, thumb.elapsedMs, showFrameNumber, showTimestamp, annotationPosition);
     }
   }, [loadedImg, thumb.cursor, thumb.elapsedMs, frameEdits, inputEvents, spotlight,
-      showFrameNumber, showTimestamp, annotationPosition, frameIndex]);
+      showFrameNumber, showTimestamp, annotationPosition, frameIndex, imageRevision]);
 
   return (
     <canvas

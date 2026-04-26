@@ -64,6 +64,20 @@ export type Edit =
       radius: number;
     }
   | {
+      kind: "image";
+      /** Absolute file-system path — used by Rust at export time. */
+      path: string;
+      /** Browser URL (convertFileSrc result) — used for canvas rendering. */
+      src: string;
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+      /** Original dimensions — kept so callers can enforce aspect ratio. */
+      naturalW: number;
+      naturalH: number;
+    }
+  | {
       /**
        * Heuristic content-simplify. Downsamples the region into blocks,
        * detects foreground via adaptive local-bg threshold, merges

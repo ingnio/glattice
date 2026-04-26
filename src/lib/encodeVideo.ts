@@ -67,6 +67,24 @@ export async function encodeVideo(opts: EncodeOptions): Promise<Uint8Array> {
   const width = bitmaps[0].width;
   const height = bitmaps[0].height;
 
+  // Pre-load any image edits so paintEdit can draw them synchronously.
+  const imageCache = new Map<string, HTMLImageElement>();
+  {
+    const srcs = new Set<string>();
+    for (const t of playable) {
+      for (const e of getFrameEdits(edits, t.index)) {
+        if (e.kind === "image") srcs.add(e.src);
+      }
+    }
+    await Promise.all([...srcs].map(src => new Promise<void>(resolve => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => { imageCache.set(src, img); resolve(); };
+      img.onerror = () => resolve();
+      img.src = src;
+    })));
+  }
+
   // Even dimensions are required by some codecs (notably H.264). Round
   // up to the nearest pair so cropping doesn't lose content.
   const out_w = width % 2 === 0 ? width : width + 1;
@@ -165,7 +183,7 @@ export async function encodeVideo(opts: EncodeOptions): Promise<Uint8Array> {
     ctx.drawImage(bm, 0, 0, width, height);
 
     const frameEdits = getFrameEdits(edits, t.index);
-    for (const e of frameEdits) paintEdit(ctx as unknown as CanvasRenderingContext2D, bm, e);
+    for (const e of frameEdits) paintEdit(ctx as unknown as CanvasRenderingContext2D, bm, e, { imageCache });
     if (t.cursor) {
       drawCursor(
         ctx as unknown as CanvasRenderingContext2D,
