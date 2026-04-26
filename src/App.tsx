@@ -494,17 +494,16 @@ export default function App() {
 
   // ——— region overlay ———
   const handleSelectRegion = useCallback(async () => {
-    // Flip into the "preparing" overlay immediately so the webview
-    // always has a full-viewport solid panel to display while the
-    // main window resizes to fullscreen. Without this the webview
-    // flashes black during the resize transition before the region
-    // overlay UI is ready.
+    // Hide the indicator BEFORE flipping the prep overlay so the old
+    // region border doesn't flash on screen during the transition.
+    // This IPC call is fast (~5 ms) — imperceptible to the user.
+    await api.hideRecordingIndicator().catch(() => {});
+    // Now flip the prep overlay so the webview has a solid panel
+    // during the resize-to-fullscreen transition.
     setRegionPrep(true);
     try {
-      await api.hideRecordingIndicator().catch(() => {});
-      // Show the prep spinner immediately — the pre-capture on hover
-      // has (almost certainly) already saved the backdrop, so the
-      // spinner won't be in the screenshot.
+      // Show the prep spinner — the pre-capture on hover has
+      // (almost certainly) already saved the backdrop.
       api.showPrepIndicator().catch(() => {});
 
       const ready = new Promise<PrevWindow>((resolve, reject) => {
