@@ -897,13 +897,28 @@ fn enter_region_overlay(app: tauri::AppHandle) -> AppResult<()> {
                 idx
             } else {
                 let t_cap = std::time::Instant::now();
-                // No fresh cache — fall back to capturing now. The
-                // spinner may end up in the screenshot (same as the
-                // old behaviour), but at least the window transition
-                // is masked.
+                // No fresh cache — fall back to capturing now.
                 let monitor_idx = capture::cursor_monitor()?
                     .or_else(|| *state.monitor_index.lock());
                 *state.monitor_index.lock() = monitor_idx;
+
+                // The frontend calls hide_recording_indicator before
+                // enter_region_overlay, but the OS compositor may not
+                // have finished removing the indicator from the screen
+                // by the time we capture. Check and hide defensively,
+                // then wait for the compositor to settle.
+                let indicator_was_visible = app_bg
+                    .get_webview_window("indicator")
+                    .and_then(|w| {
+                        let visible = w.is_visible().ok()?;
+                        if visible { w.hide().ok()?; }
+                        Some(visible)
+                    })
+                    .unwrap_or(false);
+                std::thread::sleep(std::time::Duration::from_millis(
+                    if indicator_was_visible { 120 } else { 60 },
+                ));
+
                 let monitor = capture::pick_monitor(monitor_idx)?;
                 let shot = monitor
                     .capture_image()
@@ -916,6 +931,14 @@ fn enter_region_overlay(app: tauri::AppHandle) -> AppResult<()> {
                     t_cap.elapsed()
                 );
                 *state.overlay_bg_path.lock() = Some(bg_path.clone());
+
+                // Restore indicator if we had to hide it ourselves.
+                if indicator_was_visible {
+                    if let Some(w) = app_bg.get_webview_window("indicator") {
+                        let _ = w.show();
+                    }
+                }
+
                 monitor_idx
             };
 
