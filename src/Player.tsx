@@ -45,6 +45,9 @@ interface Props {
   onSaveGif: () => void;
   onSaveVideo: (format: "mp4" | "webm") => void;
   spotlight: SpotlightDraft;
+  /** Extra hold time in ms per original frame index. 0 / absent = no hold. */
+  frameDelays: Record<number, number>;
+  onDelayChange: (frameIndex: number, extraMs: number) => void;
   compactNavButton?: React.ReactNode;
 }
 
@@ -61,6 +64,8 @@ export default function Player({
   onSaveGif,
   onSaveVideo,
   spotlight,
+  frameDelays,
+  onDelayChange,
   compactNavButton,
 }: Props) {
   // Effective trim bounds in ORIGINAL frame indices. When trim is null
@@ -118,6 +123,10 @@ export default function Player({
   const [speed, setSpeed] = useState(1);
   const [speedMenuOpen, setSpeedMenuOpen] = useState(false);
   const timerRef = useRef<number | null>(null);
+  // Mirror of frameIdx accessible inside timeout callbacks without
+  // stale closure issues.
+  const frameIdxRef = useRef(frameIdx);
+  frameIdxRef.current = frameIdx;
   const trackRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
@@ -259,51 +268,60 @@ export default function Player({
   }, [frameIdx, ready, edits, thumbByIdx, inputEvents, spotlight]);
 
   // ——— playback timer ———
+  // Uses a setTimeout chain (not setInterval) so each frame waits
+  // baseDuration + frameDelays[idx] before advancing — giving per-frame
+  // hold control without quantising to a fixed tick period.
   useEffect(() => {
-    if (
-      !playing ||
-      scrubbing ||
-      trimDrag !== null ||
-      !ready ||
-      playableIndices.length <= 1
-    ) {
+    if (!playing || scrubbing || trimDrag !== null || !ready || playableIndices.length <= 1) {
       return;
     }
-    const effectiveFps = Math.max(0.1, fps * speed);
-    const interval = Math.max(16, Math.round(1000 / effectiveFps));
-    timerRef.current = window.setInterval(() => {
-      setFrameIdx((idx) => {
-        const pos = playableIndices.indexOf(idx);
+    let cancelled = false;
+    const baseDuration = Math.max(16, Math.round(1000 / Math.max(0.1, fps * speed)));
+
+    const tick = (currentIdx: number) => {
+      const extraMs = frameDelays[currentIdx] ?? 0;
+      timerRef.current = window.setTimeout(() => {
+        if (cancelled) return;
+        const pos = playableIndices.indexOf(currentIdx);
         const last = playableIndices.length - 1;
+        let nextIdx: number;
 
         if (loop === "boomerang") {
           const nextPos = pos + directionRef.current;
           if (nextPos > last) {
-            // Hit the end — flip direction, skip back to last-1
             directionRef.current = -1;
-            return playableIndices[Math.max(0, last - 1)];
-          }
-          if (nextPos < 0) {
-            // Hit the start — flip direction, skip forward to 1
+            nextIdx = playableIndices[Math.max(0, last - 1)];
+          } else if (nextPos < 0) {
             directionRef.current = 1;
-            return playableIndices[Math.min(1, last)];
+            nextIdx = playableIndices[Math.min(1, last)];
+          } else {
+            nextIdx = playableIndices[nextPos];
           }
-          return playableIndices[nextPos];
+        } else {
+          const next = pos + 1;
+          if (next > last) {
+            if (loop === "loop") {
+              nextIdx = playableIndices[0];
+            } else {
+              setPlaying(false);
+              return; // stay on last frame
+            }
+          } else {
+            nextIdx = playableIndices[next];
+          }
         }
 
-        const next = pos + 1;
-        if (next > last) {
-          if (loop === "loop") return playableIndices[0];
-          setPlaying(false);
-          return playableIndices[last];
-        }
-        return playableIndices[next];
-      });
-    }, interval);
-    return () => {
-      if (timerRef.current) window.clearInterval(timerRef.current);
+        setFrameIdx(nextIdx);
+        tick(nextIdx);
+      }, baseDuration + extraMs);
     };
-  }, [playing, scrubbing, trimDrag, fps, speed, playableIndices, loop, ready]);
+
+    tick(frameIdxRef.current);
+    return () => {
+      cancelled = true;
+      if (timerRef.current) window.clearTimeout(timerRef.current);
+    };
+  }, [playing, scrubbing, trimDrag, fps, speed, playableIndices, loop, ready, frameDelays]);
 
   const step = useCallback(
     (delta: number) => {
@@ -759,6 +777,22 @@ export default function Player({
             </>
           )}
         </div>
+        <label className="player__hold muted" title="Extra hold time for this frame in the exported video">
+          <span>+</span>
+          <input
+            type="number"
+            min={0}
+            max={10000}
+            step={100}
+            value={frameDelays[frameIdx] ?? 0}
+            onChange={(e) =>
+              onDelayChange(frameIdx, Math.max(0, Number(e.target.value) || 0))
+            }
+            className="player__hold-input"
+            disabled={playable.length === 0}
+          />
+          <span>ms</span>
+        </label>
         <div className="player__counter muted">
           {playable.length > 0 ? (
             <>

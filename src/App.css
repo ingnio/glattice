@@ -1877,6 +1877,31 @@ body {
   background: var(--bg-panel);
 }
 
+.player__hold {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
+  user-select: none;
+}
+
+.player__hold-input {
+  width: 52px;
+  background: var(--bg-input, var(--bg-elev));
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 12px;
+  padding: 1px 4px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.player__hold-input:focus {
+  outline: none;
+  border-color: var(--color-accent, #6ea8ff);
+}
+
 .player__counter {
   font-variant-numeric: tabular-nums;
   font-size: 12px;

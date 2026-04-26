@@ -32,6 +32,9 @@ export interface EncodeOptions {
    *  encoder fetches it, decodes via Web Audio, and muxes it into the
    *  output audio track. `null` for silent recordings or imported GIFs. */
   audioPath?: string | null;
+  /** Extra hold time in ms per original frame index. Added to the frame's
+   *  natural duration so it appears longer in the exported video. */
+  frameDelays?: Record<number, number>;
   /** Spotlight vignette. Applied after cursor overlay when enabled and cursor is known. */
   spotlight?: SpotlightDraft | null;
   /** Optional progress hook called with done/total. */
@@ -40,7 +43,7 @@ export interface EncodeOptions {
 
 /** Encode the recording into a self-contained MP4 / WebM byte buffer. */
 export async function encodeVideo(opts: EncodeOptions): Promise<Uint8Array> {
-  const { thumbs, trim, edits, inputEvents, fps, format, audioPath, spotlight } =
+  const { thumbs, trim, edits, inputEvents, fps, format, audioPath, spotlight, frameDelays } =
     opts;
 
   const playable = thumbs.filter(
@@ -197,12 +200,14 @@ export async function encodeVideo(opts: EncodeOptions): Promise<Uint8Array> {
     }
 
     const timestampSec = (t.elapsedMs - baseElapsedMs) / 1000;
-    // Duration: distance to the next playable frame, or 1/fps for the
-    // last one. Mediabunny snaps to the track frameRate when set.
+    // Natural duration: distance to the next playable frame, or 1/fps
+    // for the last one. Add any per-frame hold time on top.
     const next = playable[i + 1];
-    const durationSec = next
+    const naturalSec = next
       ? Math.max(0.001, (next.elapsedMs - t.elapsedMs) / 1000)
       : 1 / fps;
+    const holdSec = (frameDelays?.[t.index] ?? 0) / 1000;
+    const durationSec = naturalSec + holdSec;
     await source.add(timestampSec, durationSec);
 
     opts.onProgress?.(i + 1, total);

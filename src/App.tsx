@@ -67,6 +67,7 @@ export default function App() {
   // Initialised to [0, 1, 2, …] on load; drag-to-reorder updates it.
   const [frameOrder, setFrameOrder] = useState<number[]>([]);
   const [edits, setEdits] = useState<FrameEdits>({});
+  const [frameDelays, setFrameDelays] = useState<Record<number, number>>({});
   const [inputEvents, setInputEvents] = useState<InputEvent[]>([]);
   // Player in/out trim (inclusive original frame indices). null = no
   // trim active (full range). Frames outside the trim are skipped at
@@ -210,6 +211,16 @@ export default function App() {
     setPrefs((p) => ({ ...p, spotlight: { ...p.spotlight, ...update } }));
   }, []);
 
+  const updateFrameDelay = useCallback((frameIndex: number, extraMs: number) => {
+    setFrameDelays((prev) => {
+      if (extraMs <= 0) {
+        const { [frameIndex]: _, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, [frameIndex]: extraMs };
+    });
+  }, []);
+
   // ——— recording timer ———
   useEffect(() => {
     let raf = 0;
@@ -236,6 +247,7 @@ export default function App() {
       setPlayerFrames(playerList);
       setFrameOrder(thumbList.map((t) => t.index));
       setEdits({});
+      setFrameDelays({});
       setTrim(null);
       try {
         setInputEvents(await api.listInputEvents());
@@ -594,6 +606,7 @@ export default function App() {
           audioPath:
             source?.kind === "recording" ? source.info.audioPath : null,
           spotlight: prefs.spotlight,
+          frameDelays,
           onProgress: (done, total) =>
             setBusy(`Encoding ${format.toUpperCase()}… ${done}/${total}`),
         });
@@ -610,6 +623,7 @@ export default function App() {
       trim,
       edits,
       inputEvents,
+      frameDelays,
       source,
       prefs.fps,
       prefs.defaultSaveDir,
@@ -792,6 +806,8 @@ export default function App() {
           onSaveGif={handleSaveGif}
           onSaveVideo={handleSaveVideo}
           spotlight={prefs.spotlight}
+          frameDelays={frameDelays}
+          onDelayChange={updateFrameDelay}
           compactNavButton={compactNavButton}
         />
       )}
