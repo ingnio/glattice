@@ -52,6 +52,11 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "publisher": "Glattice",
+    "shortDescription": "Screen recorder and annotation tool",
+    "longDescription": "Record your screen, annotate individual frames, then export as an animated GIF, MP4, WebM, or a sprite sheet.",
+    "category": "GraphicsAndDesign",
+    "licenseFile": "../EULA.txt",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -66,6 +71,15 @@
         "description": "Open in Glattice",
         "role": "Editor"
       }
-    ]
+    ],
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      },
+      "nsis": {
+        "languages": ["English"],
+        "displayLanguageSelector": false
+      }
+    }
   }
 }

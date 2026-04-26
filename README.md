@@ -23,18 +23,22 @@ Built with [Tauri v2](https://tauri.app), React 19, and Rust.
 
 ### Editing
 - **Per-frame annotation tools** — arrows, rectangles, ellipses, freehand lines, and text labels
+- **Image overlay** — insert a PNG/JPG/WebP image onto any frame; drag to move, drag corners to resize; baked into all exports including sprite sheets
 - **Blur** — drag a region to apply Gaussian blur (radius 2–40 px) for privacy
 - **Simplify** — AI-style text redaction: detects text blocks and replaces them with solid rounded shapes; tunable block size, threshold, merge, and roundness
+- **Spotlight** — darkening vignette around the cursor; configurable radius and opacity; applied consistently across player, editor, video export, and sprite sheet
+- **Per-frame hold time** — add extra pause duration to individual frames directly from the player; reflected in MP4/WebM mux timing
 - **Trim** — set in/out points with `I` / `O` keys (or drag the scrubber handles); trimmed frames are excluded from all exports
 - **Frame exclude** — hide individual frames from playback and export without deleting them
 - **Undo** — `Ctrl+Z` removes the last edit on the current frame
 - **Copy edits to all frames** — apply the current frame's annotations to every frame at once
 
 ### Playback
-- **Player** with scrubber, loop / boomerang / play-once modes
+- **Player** with scrubber, loop / boomerang / play-once modes; loop mode, speed, and play state persist across view navigation
 - **Speed control** — 0.25× to 4× playback multiplier
-- **Grid view** — thumbnail overview of all frames; exclude/restore with one click
-- **Zoom editor** — full-size per-frame editing with resize handles on every annotation
+- **Frames grid** — thumbnail overview with multi-frame selection (click / Ctrl+click / Shift+click range); Ctrl+scroll to zoom the grid; right-click context menu with per-frame actions and Properties
+- **Live sheet preview** — grid layout updates in real time as you adjust columns, padding, border, background, and annotation settings
+- **Zoom editor** — full-size per-frame editing with resize handles on every annotation; back button returns to the frames grid
 
 ### Export
 | Format | Notes |
