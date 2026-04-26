@@ -812,7 +812,7 @@ export default function App() {
 
       {view === "grid" && (
         <Grid
-          thumbs={orderedThumbs}
+          thumbs={orderedPlayerFrames.length > 0 ? orderedPlayerFrames : orderedThumbs}
           edits={edits}
           inputEvents={inputEvents}
           spotlight={prefs.spotlight}
