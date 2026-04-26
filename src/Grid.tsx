@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, memo } from "react";
 import { convertFileSrc, FrameThumb, InputEvent } from "./lib/tauri";
 import { FrameEdits, getFrameEdits } from "./lib/edits";
-import { drawClicks, drawCursor, drawKeys, drawSpotlight, paintEdit } from "./lib/paintEdits";
+import { drawAnnotation, drawClicks, drawCursor, drawKeys, drawSpotlight, paintEdit } from "./lib/paintEdits";
 import { AnnotationPos, SheetDraft, SpotlightDraft } from "./lib/prefs";
 import { IconEye, IconTrash, IconX } from "./icons";
 
@@ -120,9 +120,13 @@ export default function Grid({
   }, []);
 
   const trimLabel =
-    trim !== null
-      ? ` · trim ${trim.inIdx + 1}–${trim.outIdx + 1}`
-      : "";
+    trim !== null ? ` · trim ${trim.inIdx + 1}–${trim.outIdx + 1}` : "";
+
+  // Effective column count for the live sheet layout preview.
+  const effectiveCols =
+    sheet.columnsMode === "manual"
+      ? Math.max(1, sheet.columns)
+      : Math.max(1, Math.ceil(Math.sqrt(Math.max(1, thumbs.length))));
 
   return (
     <div className="grid-view">
@@ -310,10 +314,17 @@ export default function Grid({
         </div>
       </div>
 
-      {/* ——— Grid body ——— */}
+      {/* ——— Grid body — live sheet layout preview ——— */}
       <div
         ref={gridRef}
-        className="grid-view__body"
+        className={`grid-view__body ${sheet.bgTransparent ? "grid-view__body--transparent" : ""}`}
+        style={{
+          background: sheet.bgTransparent ? undefined : sheet.bgHex,
+          gridTemplateColumns: `repeat(${effectiveCols}, 1fr)`,
+          gap: `${Math.max(0, sheet.padding)}px`,
+          padding: `${Math.max(0, sheet.padding)}px`,
+          ...(sheet.maxWidth && sheet.maxWidth > 0 ? { maxWidth: `${sheet.maxWidth}px` } : {}),
+        }}
         onPointerMove={(e) => {
           if (dragSrcRef.current === null || !startPtRef.current) return;
           const { x, y } = startPtRef.current;
@@ -351,6 +362,7 @@ export default function Grid({
                 lineLeft ? "grid-frame--line-left" : "",
                 lineRight ? "grid-frame--line-right" : "",
               ].filter(Boolean).join(" ")}
+              style={sheet.border ? { boxShadow: "inset 0 0 0 1px rgba(200,200,200,0.7)" } : undefined}
               onPointerDown={(e) => {
                 if (e.button !== 0) return;
                 const target = e.target as HTMLElement;
@@ -377,6 +389,10 @@ export default function Grid({
                 frameEdits={getFrameEdits(edits, t.index)}
                 inputEvents={inputEvents}
                 spotlight={spotlight}
+                showFrameNumber={sheet.showFrameNumber}
+                showTimestamp={sheet.showTimestamp}
+                annotationPosition={sheet.annotationPosition}
+                frameIndex={t.index}
               />
               <div className="grid-frame__footer">
                 <span className="grid-frame__index">{pos + 1}</span>
@@ -407,6 +423,10 @@ interface FrameCanvasProps {
   frameEdits: ReturnType<typeof getFrameEdits>;
   inputEvents: InputEvent[];
   spotlight: SpotlightDraft;
+  showFrameNumber: boolean;
+  showTimestamp: boolean;
+  annotationPosition: AnnotationPos;
+  frameIndex: number;
 }
 
 const FrameCanvas = memo(function FrameCanvas({
@@ -414,6 +434,10 @@ const FrameCanvas = memo(function FrameCanvas({
   frameEdits,
   inputEvents,
   spotlight,
+  showFrameNumber,
+  showTimestamp,
+  annotationPosition,
+  frameIndex,
 }: FrameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [loadedImg, setLoadedImg] = useState<HTMLImageElement | null>(null);
@@ -446,7 +470,11 @@ const FrameCanvas = memo(function FrameCanvas({
     if (spotlight.enabled && thumb.cursor) {
       drawSpotlight(ctx, thumb.cursor.x, thumb.cursor.y, spotlight.radius, spotlight.dimOpacity);
     }
-  }, [loadedImg, thumb.cursor, thumb.elapsedMs, frameEdits, inputEvents, spotlight]);
+    if (showFrameNumber || showTimestamp) {
+      drawAnnotation(ctx, frameIndex, thumb.elapsedMs, showFrameNumber, showTimestamp, annotationPosition);
+    }
+  }, [loadedImg, thumb.cursor, thumb.elapsedMs, frameEdits, inputEvents, spotlight,
+      showFrameNumber, showTimestamp, annotationPosition, frameIndex]);
 
   return (
     <canvas

@@ -171,6 +171,65 @@ export function drawCursor(
   ctx.restore();
 }
 
+/**
+ * Draw a frame-number / timestamp annotation in a corner of the canvas.
+ * Mirrors the Rust sprite.rs annotation logic so the Grid live preview
+ * matches the exported sheet as closely as possible.
+ */
+export function drawAnnotation(
+  ctx: CanvasRenderingContext2D,
+  frameIndex: number,
+  elapsedMs: number,
+  showFrameNumber: boolean,
+  showTimestamp: boolean,
+  position: "top-left" | "top-right" | "bottom-left" | "bottom-right",
+): void {
+  if (!showFrameNumber && !showTimestamp) return;
+
+  const w = ctx.canvas.width;
+  const h = ctx.canvas.height;
+
+  const parts: string[] = [];
+  if (showFrameNumber) parts.push(`f${frameIndex + 1}`);
+  if (showTimestamp) {
+    const totalCs = Math.floor(elapsedMs / 10);
+    const secs = Math.floor(totalCs / 100);
+    const cs = totalCs % 100;
+    parts.push(`${secs}.${String(cs).padStart(2, "0")}s`);
+  }
+  const text = parts.join(" ");
+
+  const fontPx = Math.max(10, Math.round(Math.min(w, h) * 0.05));
+  const padX = fontPx * 0.5;
+  const padY = fontPx * 0.3;
+  const margin = Math.round(fontPx * 0.35);
+
+  ctx.save();
+  ctx.font = `600 ${fontPx}px "Roboto Mono", ui-monospace, Menlo, monospace`;
+  ctx.textBaseline = "top";
+
+  const tw = Math.ceil(ctx.measureText(text).width);
+  const boxW = tw + padX * 2;
+  const boxH = fontPx + padY * 2;
+
+  let x: number;
+  let y: number;
+  switch (position) {
+    case "top-right":    x = w - margin - boxW; y = margin;          break;
+    case "bottom-left":  x = margin;            y = h - margin - boxH; break;
+    case "bottom-right": x = w - margin - boxW; y = h - margin - boxH; break;
+    default:             x = margin;            y = margin;           break;
+  }
+
+  ctx.fillStyle = "rgba(15, 17, 21, 0.75)";
+  roundedRect(ctx, x, y, boxW, boxH, fontPx * 0.3);
+  ctx.fill();
+
+  ctx.fillStyle = "rgba(245, 247, 252, 0.95)";
+  ctx.fillText(text, x + padX, y + padY);
+  ctx.restore();
+}
+
 /** Break `text` into lines that each fit within `maxWidth` at the
  *  current `ctx.font` setting. Respects explicit line breaks and keeps
  *  whitespace-separated words intact. */
