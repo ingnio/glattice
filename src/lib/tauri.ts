@@ -56,6 +56,8 @@ export interface SheetConfig {
   selectedIndices: number[] | null;
   /** Per-frame vector edits, keyed by frame index. Baked in at compose. */
   edits: Record<number, Edit[]> | null;
+  /** Spotlight vignette. When set, frames without a cursor are left unaffected. */
+  spotlight: { radius: number; dimOpacity: number } | null;
 }
 
 export interface SheetInfo {

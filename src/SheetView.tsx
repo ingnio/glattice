@@ -5,7 +5,7 @@ import { copyFile } from "@tauri-apps/plugin-fs";
 import { listen } from "@tauri-apps/api/event";
 import { api, convertFileSrc, SheetConfig, SheetInfo } from "./lib/tauri";
 import { FrameEdits } from "./lib/edits";
-import { AnnotationPos, SheetDraft } from "./lib/prefs";
+import { AnnotationPos, SheetDraft, SpotlightDraft } from "./lib/prefs";
 import { buildSheetConfig, SheetFormat } from "./lib/sheetConfig";
 import { IconSave } from "./icons";
 
@@ -18,6 +18,7 @@ interface Props {
   /** Player in/out trim (inclusive original frame indices). Frames
    *  outside the range are excluded from the sheet. */
   trim: { inIdx: number; outIdx: number } | null;
+  spotlight: SpotlightDraft;
   defaultDir: string | null;
   /** Lifts the latest composed preview up to App so the window sizer
    *  can resize the sheet view to the actual sheet dimensions. */
@@ -60,6 +61,7 @@ export default function SheetView({
   frameOrder,
   edits,
   trim,
+  spotlight,
   defaultDir,
   onPreview,
   compactNavButton,
@@ -124,7 +126,7 @@ export default function SheetView({
     setError(null);
     try {
       const info = await composeOnce(
-        buildSheetConfig(sheet, excluded, frameOrder, edits, trim, "png"),
+        buildSheetConfig(sheet, excluded, frameOrder, edits, trim, "png", spotlight),
       );
       setPreview(info);
     } catch (e) {
@@ -132,7 +134,7 @@ export default function SheetView({
     } finally {
       setBusy(null);
     }
-  }, [sheet, excluded, frameOrder, edits, trim]);
+  }, [sheet, excluded, frameOrder, edits, trim, spotlight]);
 
   // Auto-regenerate the preview whenever the config changes, debounced
   // so dragging a slider doesn't fire a compose per-pixel.
@@ -182,6 +184,7 @@ export default function SheetView({
                 edits,
                 trim,
                 format,
+                spotlight,
               ),
             );
       await copyFile(source.path, target);
@@ -190,7 +193,7 @@ export default function SheetView({
     } finally {
       setBusy(null);
     }
-  }, [defaultDir, preview, sheet, excluded, frameOrder, edits, trim]);
+  }, [defaultDir, preview, sheet, excluded, frameOrder, edits, trim, spotlight]);
 
   return (
     <div className="sheet-view">

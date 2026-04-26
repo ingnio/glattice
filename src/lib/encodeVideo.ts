@@ -16,7 +16,8 @@ import {
 
 import { convertFileSrc, FrameThumb, InputEvent } from "./tauri";
 import { FrameEdits, getFrameEdits } from "./edits";
-import { drawClicks, drawCursor, drawKeys, paintEdit } from "./paintEdits";
+import { SpotlightDraft } from "./prefs";
+import { drawClicks, drawCursor, drawKeys, drawSpotlight, paintEdit } from "./paintEdits";
 
 export type VideoFormat = "mp4" | "webm";
 
@@ -32,13 +33,15 @@ export interface EncodeOptions {
    *  encoder fetches it, decodes via Web Audio, and muxes it into the
    *  output audio track. `null` for silent recordings or imported GIFs. */
   audioPath?: string | null;
+  /** Spotlight vignette. Applied after cursor overlay when enabled and cursor is known. */
+  spotlight?: SpotlightDraft | null;
   /** Optional progress hook called with done/total. */
   onProgress?: (done: number, total: number) => void;
 }
 
 /** Encode the recording into a self-contained MP4 / WebM byte buffer. */
 export async function encodeVideo(opts: EncodeOptions): Promise<Uint8Array> {
-  const { thumbs, excluded, trim, edits, inputEvents, fps, format, audioPath } =
+  const { thumbs, excluded, trim, edits, inputEvents, fps, format, audioPath, spotlight } =
     opts;
 
   const playable = thumbs.filter(
@@ -184,6 +187,15 @@ export async function encodeVideo(opts: EncodeOptions): Promise<Uint8Array> {
         t.elapsedMs,
         width,
         height,
+      );
+    }
+    if (spotlight?.enabled && t.cursor) {
+      drawSpotlight(
+        ctx as unknown as CanvasRenderingContext2D,
+        t.cursor.x,
+        t.cursor.y,
+        spotlight.radius,
+        spotlight.dimOpacity,
       );
     }
 

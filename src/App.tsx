@@ -34,6 +34,7 @@ import {
   savePrefs,
   SheetDraft,
   SimplifyDraft,
+  SpotlightDraft,
   Theme,
 } from "./lib/prefs";
 import "./App.css";
@@ -230,6 +231,10 @@ export default function App() {
 
   const updateSimplify = useCallback((update: Partial<SimplifyDraft>) => {
     setPrefs((p) => ({ ...p, simplify: { ...p.simplify, ...update } }));
+  }, []);
+
+  const updateSpotlight = useCallback((update: Partial<SpotlightDraft>) => {
+    setPrefs((p) => ({ ...p, spotlight: { ...p.spotlight, ...update } }));
   }, []);
 
   // ——— recording timer ———
@@ -618,6 +623,7 @@ export default function App() {
           format,
           audioPath:
             source?.kind === "recording" ? source.info.audioPath : null,
+          spotlight: prefs.spotlight,
           onProgress: (done, total) =>
             setBusy(`Encoding ${format.toUpperCase()}… ${done}/${total}`),
         });
@@ -686,7 +692,7 @@ export default function App() {
 
     try {
       await api.generateSpriteSheet(
-        buildSheetConfig(prefs.sheet, excluded, frameOrder, edits, trim),
+        buildSheetConfig(prefs.sheet, excluded, frameOrder, edits, trim, "png", prefs.spotlight),
       );
       const info = await ready;
       const ext = info.mime.split("/")[1] ?? "png";
@@ -857,6 +863,8 @@ export default function App() {
           onBack={() => setView("home")}
           onSaveGif={handleSaveGif}
           onSaveVideo={handleSaveVideo}
+          spotlight={prefs.spotlight}
+          onSpotlightChange={updateSpotlight}
           compactNavButton={compactNavButton}
         />
       )}
@@ -892,6 +900,7 @@ export default function App() {
           edits={edits}
           inputEvents={inputEvents}
           simplify={prefs.simplify}
+          spotlight={prefs.spotlight}
           onBack={() => setView("grid")}
           onNavigate={setZoomIndex}
           onToggle={toggleFrame}
@@ -909,6 +918,7 @@ export default function App() {
           frameOrder={frameOrder}
           edits={edits}
           trim={trim}
+          spotlight={prefs.spotlight}
           defaultDir={prefs.defaultSaveDir}
           onPreview={setSheetPreview}
           compactNavButton={compactNavButton}

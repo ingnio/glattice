@@ -154,6 +154,13 @@ export const IconX = ({ size = defaults.size }: IconProps) =>
     </>,
   );
 
+export const IconSpotlight = ({ size = defaults.size }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="4" fill="currentColor" stroke="none" />
+    <circle cx="12" cy="12" r="8.5" strokeOpacity="0.45" />
+  </svg>
+);
+
 export const IconLogo = ({ size = defaults.size }: IconProps) =>
   svg(
     size,

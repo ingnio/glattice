@@ -56,6 +56,17 @@ pub struct SheetConfig {
     /// Per-frame edits keyed by original frame index. Baked onto each
     /// frame at full source resolution, before any downscaling.
     pub edits: Option<HashMap<u32, Vec<Edit>>>,
+    /// Spotlight vignette. When present, frames without a cursor position
+    /// are left unaffected; frames with a cursor get a dim overlay outside
+    /// the given radius. Applied after edits + cursor, before resize.
+    pub spotlight: Option<SpotlightConfig>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct SpotlightConfig {
+    pub radius: f32,
+    pub dim_opacity: f32,
 }
 
 fn default_annotation_position() -> String {
@@ -212,6 +223,12 @@ pub fn compose(recording: &Recording, config: &SheetConfig) -> AppResult<SheetOu
                     }
                 }
             }
+            // Spotlight is applied after all edits + cursor overlay so the
+            // dim vignette sits on top of everything, just like the canvas
+            // version. Only applied when the frame has cursor data.
+            if let (Some(sp), Some((cx, cy))) = (&config.spotlight, frame.cursor) {
+                apply_spotlight(&mut img, cx as f32, cy as f32, sp.radius, sp.dim_opacity);
+            }
             Ok(if frame.width == frame_w && frame.height == frame_h {
                 img
             } else {
@@ -267,6 +284,52 @@ pub fn compose(recording: &Recording, config: &SheetConfig) -> AppResult<SheetOu
         columns: cols,
         rows,
     })
+}
+
+/// Overlay a spotlight vignette centred at `(cx, cy)`. Pixels outside
+/// the soft-edged circle are darkened by `dim_opacity`. The transition
+/// is feathered over ±25 % of the radius for a smooth falloff.
+fn apply_spotlight(img: &mut RgbaImage, cx: f32, cy: f32, radius: f32, dim_opacity: f32) {
+    let feather = radius * 0.25;
+    let inner_r = (radius - feather).max(0.0);
+    let outer_r = radius + feather * 0.5;
+    let inner_r2 = inner_r * inner_r;
+    let outer_r2 = outer_r * outer_r;
+    let range = outer_r - inner_r;
+
+    for y in 0..img.height() {
+        for x in 0..img.width() {
+            let dx = x as f32 - cx;
+            let dy = y as f32 - cy;
+            let dist2 = dx * dx + dy * dy;
+            if dist2 <= inner_r2 {
+                continue; // fully inside the spotlight
+            }
+            let alpha = if dist2 >= outer_r2 {
+                dim_opacity
+            } else {
+                let dist = dist2.sqrt();
+                let t = (dist - inner_r) / range;
+                dim_opacity * t
+            };
+            if alpha <= 0.0 {
+                continue;
+            }
+            let px = img.get_pixel(x, y);
+            let [r, g, b, a] = px.0;
+            let keep = 1.0 - alpha;
+            img.put_pixel(
+                x,
+                y,
+                Rgba([
+                    (r as f32 * keep).round() as u8,
+                    (g as f32 * keep).round() as u8,
+                    (b as f32 * keep).round() as u8,
+                    a,
+                ]),
+            );
+        }
+    }
 }
 
 fn draw_rect_border(img: &mut RgbaImage, x: u32, y: u32, w: u32, h: u32, color: [u8; 4]) {

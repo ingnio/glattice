@@ -202,6 +202,47 @@ export function wrapText(
   return out;
 }
 
+/**
+ * Draw a spotlight vignette centred at `(cx, cy)`. Everything outside
+ * the spotlight is dimmed by `dimOpacity`. The edge is feathered with a
+ * radial gradient so the transition is soft rather than a hard cutoff.
+ */
+export function drawSpotlight(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  radius: number,
+  dimOpacity: number,
+): void {
+  const w = ctx.canvas.width;
+  const h = ctx.canvas.height;
+  const feather = radius * 0.25;
+  const innerR = Math.max(0, radius - feather);
+  const outerR = radius + feather * 0.5;
+
+  ctx.save();
+
+  // Solid dim layer covering everything outside the outer radius.
+  // Even-odd fill rule punches a circular hole in the rect.
+  ctx.beginPath();
+  ctx.rect(0, 0, w, h);
+  ctx.arc(cx, cy, outerR, 0, Math.PI * 2, true);
+  ctx.fillStyle = `rgba(0,0,0,${dimOpacity})`;
+  ctx.fill("evenodd");
+
+  // Gradient feather ring from transparent (innerR) → dim (outerR).
+  const grad = ctx.createRadialGradient(cx, cy, innerR, cx, cy, outerR);
+  grad.addColorStop(0, "rgba(0,0,0,0)");
+  grad.addColorStop(1, `rgba(0,0,0,${dimOpacity})`);
+  ctx.beginPath();
+  ctx.arc(cx, cy, outerR, 0, Math.PI * 2);
+  ctx.arc(cx, cy, innerR, 0, Math.PI * 2, true);
+  ctx.fillStyle = grad;
+  ctx.fill("evenodd");
+
+  ctx.restore();
+}
+
 export function paintEdit(
   ctx: CanvasRenderingContext2D,
   img: CanvasImageSource,

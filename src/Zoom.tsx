@@ -13,8 +13,8 @@ import {
   getFrameEdits,
   setFrameEdits,
 } from "./lib/edits";
-import { drawClicks, drawCursor, drawKeys, paintEdit } from "./lib/paintEdits";
-import type { SimplifyDraft } from "./lib/prefs";
+import { drawClicks, drawCursor, drawKeys, drawSpotlight, paintEdit } from "./lib/paintEdits";
+import type { SimplifyDraft, SpotlightDraft } from "./lib/prefs";
 import {
   IconArrow,
   IconBlur,
@@ -40,6 +40,7 @@ interface Props {
   edits: FrameEdits;
   inputEvents: InputEvent[];
   simplify: SimplifyDraft;
+  spotlight: SpotlightDraft;
   onBack: () => void;
   onNavigate: (index: number) => void;
   onToggle: (index: number) => void;
@@ -55,6 +56,7 @@ export default function Zoom({
   edits,
   inputEvents,
   simplify,
+  spotlight,
   onBack,
   onNavigate,
   onToggle,
@@ -288,6 +290,12 @@ export default function Zoom({
       );
     }
 
+    // Spotlight vignette — applied on top of edits + cursor so the dim
+    // layer doesn't bury the cursor glyph or click rings.
+    if (spotlight.enabled && current?.cursor) {
+      drawSpotlight(ctx, current.cursor.x, current.cursor.y, spotlight.radius, spotlight.dimOpacity);
+    }
+
     // Paint selection outline whenever something is selected, regardless
     // of which tool is active. After drawing, the new edit stays selected
     // so the toolbar can modify it — the outline makes that state visible.
@@ -307,6 +315,7 @@ export default function Zoom({
     current?.cursor,
     current?.elapsedMs,
     inputEvents,
+    spotlight,
   ]);
 
   // ——— Coordinate mapping ———
@@ -705,6 +714,9 @@ export default function Zoom({
         drawClicks(ctx, inputEvents, current.elapsedMs, imgSize.w, imgSize.h);
         drawKeys(ctx, inputEvents, current.elapsedMs, imgSize.w, imgSize.h);
       }
+      if (spotlight.enabled && current.cursor) {
+        drawSpotlight(ctx, current.cursor.x, current.cursor.y, spotlight.radius, spotlight.dimOpacity);
+      }
       const ext = target.split(".").pop()?.toLowerCase() ?? "png";
       const mime =
         ext === "jpg" || ext === "jpeg" ? "image/jpeg" : ext === "webp" ? "image/webp" : "image/png";
@@ -714,7 +726,7 @@ export default function Zoom({
     } finally {
       setSaving(false);
     }
-  }, [current, imgSize, frameEdits, inputEvents]);
+  }, [current, imgSize, frameEdits, inputEvents, spotlight]);
 
   const srcUrl = useMemo(
     () => (current ? convertFileSrc(current.path) : ""),

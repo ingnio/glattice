@@ -1,6 +1,6 @@
 import { SheetConfig } from "./tauri";
 import { FrameEdits } from "./edits";
-import { SheetDraft } from "./prefs";
+import { SheetDraft, SpotlightDraft } from "./prefs";
 
 export type SheetFormat = "png" | "jpeg" | "webp";
 
@@ -23,6 +23,7 @@ export function buildSheetConfig(
   edits: FrameEdits,
   trim: { inIdx: number; outIdx: number } | null,
   format: SheetFormat = "png",
+  spotlight?: SpotlightDraft | null,
 ): SheetConfig {
   // Preserve display order while filtering excluded + out-of-trim frames.
   const includedIndices = orderedIndices.filter(
@@ -50,5 +51,9 @@ export function buildSheetConfig(
     annotationPosition: sheet.annotationPosition,
     selectedIndices: includedIndices,
     edits: hasEdits ? edits : null,
+    spotlight:
+      spotlight?.enabled
+        ? { radius: spotlight.radius, dimOpacity: spotlight.dimOpacity }
+        : null,
   };
 }

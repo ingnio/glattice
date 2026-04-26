@@ -40,6 +40,14 @@ export interface SimplifyDraft {
   roundness: number;
 }
 
+export interface SpotlightDraft {
+  enabled: boolean;
+  /** Spotlight radius in source-frame pixels. */
+  radius: number;
+  /** Opacity of the dim vignette outside the spotlight (0–1). */
+  dimOpacity: number;
+}
+
 export interface Preferences {
   fps: number;
   highQuality: boolean;
@@ -67,6 +75,8 @@ export interface Preferences {
    * user tweaks the toolbar sliders the new values become the
    * starting point next time they open the editor. */
   simplify: SimplifyDraft;
+  /** Spotlight vignette overlay for Player / export. */
+  spotlight: SpotlightDraft;
 }
 
 export const DEFAULT_SHEET: SheetDraft = {
@@ -90,6 +100,12 @@ export const DEFAULT_SIMPLIFY: SimplifyDraft = {
   roundness: 6,
 };
 
+export const DEFAULT_SPOTLIGHT: SpotlightDraft = {
+  enabled: false,
+  radius: 200,
+  dimOpacity: 0.72,
+};
+
 export const DEFAULT_PREFS: Preferences = {
   fps: 5,
   highQuality: false,
@@ -104,6 +120,7 @@ export const DEFAULT_PREFS: Preferences = {
   compactUi: false,
   sheet: DEFAULT_SHEET,
   simplify: DEFAULT_SIMPLIFY,
+  spotlight: DEFAULT_SPOTLIGHT,
 };
 
 export interface HistoryEntry {
@@ -155,6 +172,7 @@ export async function loadPrefs(): Promise<Preferences> {
     cursorMode: cursorMode ?? DEFAULT_PREFS.cursorMode,
     sheet: { ...DEFAULT_SHEET, ...(stored?.sheet ?? {}) },
     simplify: { ...DEFAULT_SIMPLIFY, ...(stored?.simplify ?? {}) },
+    spotlight: { ...DEFAULT_SPOTLIGHT, ...(stored?.spotlight ?? {}) },
   };
 }
 
