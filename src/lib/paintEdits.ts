@@ -304,7 +304,7 @@ export function drawSpotlight(
 
 export function paintEdit(
   ctx: CanvasRenderingContext2D,
-  img: CanvasImageSource,
+  _img: CanvasImageSource,
   e: Edit,
   opts?: { isDraft?: boolean; imageCache?: Map<string, HTMLImageElement> },
 ): void {
