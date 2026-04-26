@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, memo } from "react";
 import { convertFileSrc, FrameThumb, InputEvent } from "./lib/tauri";
 import { FrameEdits, getFrameEdits } from "./lib/edits";
 import { drawClicks, drawCursor, drawKeys, drawSpotlight, paintEdit } from "./lib/paintEdits";
@@ -319,43 +319,62 @@ interface FrameCanvasProps {
 
 /** Per-thumbnail canvas: paints source PNG → frame edits → cursor →
  *  click rings → keys → spotlight. Matches Player + encodeVideo pipelines
- *  so the grid is a high-fidelity representation of what gets exported. */
-function FrameCanvas({ thumb, frameEdits, inputEvents, spotlight }: FrameCanvasProps) {
+ *  so the grid is a high-fidelity representation of what gets exported.
+ *
+ *  Two separate effects keep loading and drawing decoupled:
+ *  - Effect 1 loads the image once per path change, stores it in state.
+ *  - Effect 2 repaints whenever the loaded image OR any overlay changes
+ *    (edits, spotlight, cursor, input events). This means edits applied
+ *    in the Zoom view appear immediately when the user returns to Grid
+ *    without re-fetching the source PNG. */
+const FrameCanvas = memo(function FrameCanvas({
+  thumb,
+  frameEdits,
+  inputEvents,
+  spotlight,
+}: FrameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [loadedImg, setLoadedImg] = useState<HTMLImageElement | null>(null);
 
+  // Load source image. On path change the old image stays rendered until
+  // the new one is ready (no blank flash).
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
     const img = new Image();
     img.crossOrigin = "anonymous";
     let cancelled = false;
     img.onload = () => {
-      if (cancelled) return;
-      if (
-        canvas.width !== img.naturalWidth ||
-        canvas.height !== img.naturalHeight
-      ) {
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
-      }
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-      ctx.drawImage(img, 0, 0);
-      for (const e of frameEdits) paintEdit(ctx, img, e);
-      if (thumb.cursor) drawCursor(ctx, thumb.cursor.x, thumb.cursor.y);
-      if (inputEvents.length > 0) {
-        drawClicks(ctx, inputEvents, thumb.elapsedMs, canvas.width, canvas.height);
-        drawKeys(ctx, inputEvents, thumb.elapsedMs, canvas.width, canvas.height);
-      }
-      if (spotlight.enabled && thumb.cursor) {
-        drawSpotlight(ctx, thumb.cursor.x, thumb.cursor.y, spotlight.radius, spotlight.dimOpacity);
-      }
+      if (!cancelled) setLoadedImg(img);
     };
     img.src = convertFileSrc(thumb.path);
     return () => {
       cancelled = true;
     };
-  }, [thumb.path, thumb.elapsedMs, thumb.cursor, frameEdits, inputEvents, spotlight]);
+  }, [thumb.path]);
+
+  // Repaint whenever the image or any overlay changes.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !loadedImg) return;
+    if (
+      canvas.width !== loadedImg.naturalWidth ||
+      canvas.height !== loadedImg.naturalHeight
+    ) {
+      canvas.width = loadedImg.naturalWidth;
+      canvas.height = loadedImg.naturalHeight;
+    }
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(loadedImg, 0, 0);
+    for (const e of frameEdits) paintEdit(ctx, loadedImg, e);
+    if (thumb.cursor) drawCursor(ctx, thumb.cursor.x, thumb.cursor.y);
+    if (inputEvents.length > 0) {
+      drawClicks(ctx, inputEvents, thumb.elapsedMs, canvas.width, canvas.height);
+      drawKeys(ctx, inputEvents, thumb.elapsedMs, canvas.width, canvas.height);
+    }
+    if (spotlight.enabled && thumb.cursor) {
+      drawSpotlight(ctx, thumb.cursor.x, thumb.cursor.y, spotlight.radius, spotlight.dimOpacity);
+    }
+  }, [loadedImg, thumb.cursor, thumb.elapsedMs, frameEdits, inputEvents, spotlight]);
 
   return (
     <canvas
@@ -364,4 +383,4 @@ function FrameCanvas({ thumb, frameEdits, inputEvents, spotlight }: FrameCanvasP
       aria-label={`Frame ${thumb.index + 1}`}
     />
   );
-}
+});

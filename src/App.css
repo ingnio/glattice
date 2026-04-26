@@ -1431,6 +1431,24 @@ body {
   flex-wrap: wrap;
 }
 
+.config__slider-row {
+  flex: 1;
+  justify-content: flex-end;
+}
+
+.config__slider-row input[type="range"] {
+  flex: 1;
+  max-width: 140px;
+  accent-color: var(--color-accent);
+}
+
+.config__slider-val {
+  min-width: 36px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+
 .row__hint {
   margin: 6px 0 0;
   font-size: 12px;

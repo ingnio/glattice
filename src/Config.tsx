@@ -272,6 +272,60 @@ export default function Config({
         </section>
 
         <section className="config__section">
+          <div className="row">
+            <span>Spotlight</span>
+            <div className="row__control">
+              <label className="switch">
+                <input
+                  type="checkbox"
+                  checked={prefs.spotlight.enabled}
+                  onChange={(e) =>
+                    onChange({ spotlight: { ...prefs.spotlight, enabled: e.target.checked } })
+                  }
+                />
+                <span className="slider" />
+              </label>
+            </div>
+          </div>
+          <label className="row">
+            <span>Radius</span>
+            <div className="row__control config__slider-row">
+              <input
+                type="range"
+                min={50}
+                max={700}
+                step={10}
+                value={prefs.spotlight.radius}
+                onChange={(e) =>
+                  onChange({ spotlight: { ...prefs.spotlight, radius: Number(e.target.value) } })
+                }
+              />
+              <span className="muted config__slider-val">{prefs.spotlight.radius}px</span>
+            </div>
+          </label>
+          <label className="row">
+            <span>Darkness</span>
+            <div className="row__control config__slider-row">
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={5}
+                value={Math.round(prefs.spotlight.dimOpacity * 100)}
+                onChange={(e) =>
+                  onChange({ spotlight: { ...prefs.spotlight, dimOpacity: Number(e.target.value) / 100 } })
+                }
+              />
+              <span className="muted config__slider-val">{Math.round(prefs.spotlight.dimOpacity * 100)}%</span>
+            </div>
+          </label>
+          <p className="row__hint muted">
+            Dims everything outside a spotlight circle around the cursor during
+            playback and export. Only applies when cursor tracking is enabled.
+          </p>
+        </section>
+
+        <section className="config__section">
           <label className="row">
             <span>Default save folder</span>
             <div className="row__control save-dir">

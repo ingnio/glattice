@@ -17,6 +17,7 @@ import { drawClicks, drawCursor, drawKeys, drawSpotlight, paintEdit } from "./li
 import type { SimplifyDraft, SpotlightDraft } from "./lib/prefs";
 import {
   IconArrow,
+  IconBack,
   IconBlur,
   IconCircleTool,
   IconCopyAll,
@@ -872,6 +873,15 @@ export default function Zoom({
   return (
     <div className="zoom">
       <div className="zoom__bar">
+        <button
+          type="button"
+          className="icon-btn"
+          onClick={onBack}
+          title="Back to frames"
+        >
+          <IconBack size={18} />
+        </button>
+        <span className="zoom__bar__sep" />
         <div className="editor-bar__group">
           {toolBtn("select", <IconCursor size={18} />, "Select / view")}
           {toolBtn("rect", <IconRectTool size={18} />, "Rectangle")}
