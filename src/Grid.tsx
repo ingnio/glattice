@@ -304,7 +304,7 @@ export default function Grid({
             <>
               <span className="muted" style={{ fontSize: 11 }}>R</span>
               <input
-                type="range" min={50} max={700} step={10} value={spotlight.radius}
+                type="range" min={0} max={200} step={5} value={spotlight.radius}
                 onChange={(e) => onSpotlightChange({ radius: Number(e.target.value) })}
                 className="sheet-bar__range"
                 title="Spotlight radius (px)"

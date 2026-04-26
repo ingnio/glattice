@@ -292,9 +292,9 @@ export default function Config({
             <div className="row__control config__slider-row">
               <input
                 type="range"
-                min={50}
-                max={700}
-                step={10}
+                min={0}
+                max={200}
+                step={5}
                 value={prefs.spotlight.radius}
                 onChange={(e) =>
                   onChange({ spotlight: { ...prefs.spotlight, radius: Number(e.target.value) } })
