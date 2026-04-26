@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState, memo } from "react";
+import { useCtrlWheelZoom } from "./lib/useCtrlWheelZoom";
 import { convertFileSrc, FrameThumb, InputEvent } from "./lib/tauri";
 import { FrameEdits, getFrameEdits } from "./lib/edits";
 import { drawAnnotation, drawClicks, drawCursor, drawKeys, drawSpotlight, paintEdit } from "./lib/paintEdits";
 import { AnnotationPos, SheetDraft, SpotlightDraft } from "./lib/prefs";
-import { IconBack, IconEye, IconPlus, IconTrash, IconX } from "./icons";
+import { IconBack, IconEye, IconInfo, IconPlus, IconTrash, IconX } from "./icons";
 
 interface Props {
   thumbs: FrameThumb[];
@@ -53,6 +54,14 @@ export default function Grid({
   const [restoreOpen, setRestoreOpen] = useState(false);
   // Frame indices shown in the Properties modal (null = closed).
   const [propertiesTargets, setPropertiesTargets] = useState<number[] | null>(null);
+
+  // Ctrl+scroll zoom: divides effectiveCols so cells grow/shrink while
+  // still filling the container width with 1fr columns.
+  const [zoomScale, setZoomScale] = useState(1);
+  const zoomRef = useRef(1);
+  const gridBodyRef = useRef<HTMLDivElement | null>(null);
+  const applyZoom = useCallback((z: number) => { zoomRef.current = z; setZoomScale(z); }, []);
+  const resetZoom = useCtrlWheelZoom(gridBodyRef, applyZoom, zoomRef);
 
   // Right-click context menu
   const [contextMenu, setContextMenu] = useState<{
@@ -152,10 +161,12 @@ export default function Grid({
     trim !== null ? ` · trim ${trim.inIdx + 1}–${trim.outIdx + 1}` : "";
 
   // Effective column count for the live sheet layout preview.
-  const effectiveCols =
+  // zoomScale > 1 → fewer columns → bigger thumbnails. Works in both modes.
+  const baseEffectiveCols =
     sheet.columnsMode === "manual"
       ? Math.max(1, sheet.columns)
       : Math.max(1, Math.ceil(Math.sqrt(Math.max(1, thumbs.length))));
+  const effectiveCols = Math.max(1, Math.round(baseEffectiveCols / zoomScale));
 
   return (
     <div className="grid-view">
@@ -366,8 +377,13 @@ export default function Grid({
             Outer div: full-width, provides the background colour/checkerboard.
             Inner div: centred, constrained by max-width, holds the grid cells. */}
       <div
+        ref={gridBodyRef}
         className={`grid-view__body ${sheet.bgTransparent ? "grid-view__body--transparent" : ""}`}
         style={{ background: sheet.bgTransparent ? undefined : sheet.bgHex }}
+        onDoubleClick={(e) => {
+          // Double-click on the background (not a frame) resets zoom.
+          if (!(e.target as HTMLElement).closest(".grid-frame")) resetZoom();
+        }}
       >
       <div
         ref={gridRef}
@@ -496,6 +512,7 @@ export default function Grid({
                 closeContextMenu();
               }}
             >
+              <span className="context-menu__icon"><IconInfo size={13} /></span>
               Properties
             </button>
             <button
@@ -535,9 +552,14 @@ function FramePropertiesModal({
   const allSame = values.every((v) => v === values[0]);
   const [duration, setDuration] = useState(allSame ? values[0] : 0);
 
-  const handleChange = (val: number) => {
-    setDuration(val);
-    targets.forEach((idx) => onDelayChange(idx, val));
+  const apply = () => {
+    targets.forEach((idx) => onDelayChange(idx, duration));
+    onClose();
+  };
+
+  const handleKey = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") apply();
+    if (e.key === "Escape") onClose();
   };
 
   return (
@@ -562,7 +584,8 @@ function FramePropertiesModal({
                 step={100}
                 value={duration}
                 placeholder={!allSame ? "mixed" : undefined}
-                onChange={(e) => handleChange(Math.max(0, Number(e.target.value) || 0))}
+                onChange={(e) => setDuration(Math.max(0, Number(e.target.value) || 0))}
+                onKeyDown={handleKey}
                 className="frame-props-modal__input"
                 // eslint-disable-next-line jsx-a11y/no-autofocus
                 autoFocus
@@ -574,6 +597,10 @@ function FramePropertiesModal({
             Extra hold time added to this frame's natural duration in the
             exported video. 0 = use the recording's fps.
           </p>
+        </div>
+        <div className="frame-props-modal__footer">
+          <button type="button" className="btn btn--sm" onClick={onClose}>Cancel</button>
+          <button type="button" className="btn btn--sm btn--primary" onClick={apply}>OK</button>
         </div>
       </div>
     </div>

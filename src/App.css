@@ -2493,6 +2493,14 @@ body {
   border-color: var(--color-accent, #6ea8ff);
 }
 
+.frame-props-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+}
+
 .grid-frame__footer {
   display: flex;
   align-items: center;
