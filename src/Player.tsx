@@ -67,14 +67,21 @@ export default function Player({
   // we treat the bounds as the full range — that way the scrubber
   // handles always have a defined position.
   const trimIn = trim?.inIdx ?? 0;
+  // trimOut for scrubber display only. NOT used for playable filtering
+  // when trim is null — frame indices aren't contiguous (gaps from
+  // deleted frames, blank frames appended at high indices), so
+  // thumbs.length-1 would incorrectly exclude out-of-range indices.
   const trimOut = trim?.outIdx ?? Math.max(0, thumbs.length - 1);
   const trimActive = trim !== null;
 
-  // Frames that actually play. Filtered by both manual excludes and
-  // the in/out trim window.
+  // When no trim is active, all thumbs play. When trim is set, filter
+  // by original index so only frames within the trim window play.
   const playable = useMemo(
-    () => thumbs.filter((t) => t.index >= trimIn && t.index <= trimOut),
-    [thumbs, trimIn, trimOut],
+    () =>
+      trim === null
+        ? thumbs
+        : thumbs.filter((t) => t.index >= trim.inIdx && t.index <= trim.outIdx),
+    [thumbs, trim],
   );
   const playableIndices = useMemo(
     () => playable.map((t) => t.index),
