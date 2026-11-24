@@ -210,6 +210,9 @@ export default function Zoom({
     if (ok) onDelete(current.index);
   }, [current, pos, onDelete]);
 
+  // Right-click menu on the frame.
+  const [frameMenu, setFrameMenu] = useState<{ x: number; y: number } | null>(null);
+
   // Keyboard shortcuts. Delete removes the selected edit when one is
   // focused, otherwise it deletes the frame (after confirming).
   useEffect(() => {
@@ -219,7 +222,8 @@ export default function Zoom({
       const editingText = tag === "input" || tag === "textarea";
       if (editingText) return;
       if (e.key === "Escape") {
-        if (drafting) setDrafting(null);
+        if (frameMenu !== null) setFrameMenu(null);
+        else if (drafting) setDrafting(null);
         else if (selectedIdx !== null) setSelectedIdx(null);
         else onBack();
       } else if (e.key === "ArrowLeft" && pos > 0) {
@@ -261,6 +265,7 @@ export default function Zoom({
     onNavigate,
     onDelete,
     onCopyFrame,
+    frameMenu,
     current,
     drafting,
     edits,
@@ -842,8 +847,6 @@ export default function Zoom({
     setImageRevision((r) => r + 1);
   }, [current, imgSize, frameEdits, commitEdit]);
 
-  // Right-click menu on the frame.
-  const [frameMenu, setFrameMenu] = useState<{ x: number; y: number } | null>(null);
   const copyFrame = useCallback(() => {
     if (current) onCopyFrame(current.index);
   }, [current, onCopyFrame]);

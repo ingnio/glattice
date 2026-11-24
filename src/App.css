@@ -1667,6 +1667,21 @@ body {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  /* Long lists scroll here, inside the card, so Home itself always fits
+   * its window. About five and a half rows show, and the cut-off row
+   * hints that there is more. */
+  max-height: 272px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.recent__list > * {
+  flex-shrink: 0;
+}
+
+/* Compact rows are shorter, so the same idea needs a smaller cap. */
+.home2--compact .recent__list {
+  max-height: 176px;
 }
 
 .recent-entry {

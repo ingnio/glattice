@@ -37,7 +37,6 @@ interface Props {
   dragSourcePath: string | null;
   fps: number;
   sourceLabel: string;
-  onBack: () => void;
   onSaveGif: () => void;
   onSaveVideo: (format: "mp4" | "webm") => void;
   onExportSheet: () => void;
@@ -67,7 +66,6 @@ export default function Player({
   dragSourcePath,
   fps,
   sourceLabel,
-  onBack,
   onSaveGif,
   onSaveVideo,
   onExportSheet,
@@ -534,7 +532,10 @@ export default function Player({
       } else if (e.key === "ArrowRight") {
         step(1);
       } else if (e.key === "Escape") {
-        onBack();
+        // Esc only closes an open menu. It used to leave for Home, which
+        // was too easy to do by accident and lost your place.
+        setSaveMenuOpen(false);
+        setSpeedMenuOpen(false);
       } else if (e.key === "i" || e.key === "I") {
         setTrimToCurrent("in");
       } else if (e.key === "o" || e.key === "O") {
@@ -545,7 +546,7 @@ export default function Player({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [step, onBack, togglePlay, setTrimToCurrent, clearTrim, trimActive]);
+  }, [step, togglePlay, setTrimToCurrent, clearTrim, trimActive]);
 
   // ——— derived percentages for rendering ———
   // All positions are array-based (0 … length-1), not original frame

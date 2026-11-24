@@ -306,8 +306,9 @@ export default function App() {
       // panel, recording state, …). Wait for a measurement taken in the
       // layout now on screen, so toggling compact resizes once, straight
       // to the right size. The window also has to leave room for the tab
-      // bar and any error banner drawn around Home, and the full layout
-      // never grows past its original 910 px.
+      // bar and any error banner drawn around Home. There is no fixed
+      // cap: the Recent list scrolls inside its own card, so the content
+      // has a bounded height, and only a short screen can limit it.
       if (homeMeasure !== null && homeMeasure.compact === prefs.compactUi) {
         const px = (sel: string) =>
           document.querySelector<HTMLElement>(sel)?.offsetHeight ?? 0;
@@ -315,7 +316,7 @@ export default function App() {
         const natural = homeMeasure.h + around;
         const [w, h] = prefs.compactUi
           ? [HOME_COMPACT[0], Math.min(maxH, natural)]
-          : [HOME_FULL[0], Math.min(HOME_FULL[1], maxH, Math.max(420, natural))];
+          : [HOME_FULL[0], Math.min(maxH, Math.max(420, natural))];
         target = new LogicalSize(w, h);
       }
     } else if (view === "config") {
@@ -1278,7 +1279,6 @@ export default function App() {
           dragSourcePath={clipModified ? null : (source?.info.path ?? null)}
           fps={clipFps}
           sourceLabel={sourceLabel}
-          onBack={() => setView("home")}
           onSaveGif={handleSaveGif}
           onSaveVideo={handleSaveVideo}
           onExportSheet={() => setShowPreviewModal(true)}
