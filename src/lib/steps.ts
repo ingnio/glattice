@@ -241,9 +241,16 @@ const FONT = '"Segoe UI", system-ui, -apple-system, Arial, sans-serif';
  *  each step as a numbered caption above its picture. Always on a white
  *  page, whatever the app's theme, since it is a document to share. */
 export function composeGuideCanvas(title: string, details: string, steps: RenderedStep[]): HTMLCanvasElement {
-  const W = 920;
   const PAD = 36;
-  const contentW = W - PAD * 2;
+  // Only as wide as the pictures need: a guide of small region shots
+  // shouldn't sit in a wide page with blank space down the right. It
+  // never goes below a width captions can be read at, or above the
+  // width large shots are scaled down to.
+  const MAX_CONTENT_W = 848;
+  const MIN_CONTENT_W = 360;
+  const widest = steps.reduce((w, s) => Math.max(w, s.image.width), 0);
+  const contentW = Math.max(MIN_CONTENT_W, Math.min(MAX_CONTENT_W, widest));
+  const W = contentW + PAD * 2;
   const BADGE = 15;
   const textX = PAD + BADGE * 2 + 12;
   const textW = W - PAD - textX;
