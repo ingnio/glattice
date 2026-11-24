@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [0.2.0] — 2026-11-24
 
 ### Recording
 - While recording, Glattice becomes a small always-on-top strip with a timer, Stop and Discard, and stays out of the recording
@@ -36,6 +36,7 @@
 - The installer shows the MIT license; the separate EULA is gone
 - Third-party licenses are listed in `THIRD-PARTY-NOTICES.md` and installed with the app
 - Added contributor guide, code of conduct, security policy, and automated builds
+- The app now runs under a content security policy that only allows its own code and local files
 
 ## [0.1.0] — 2026-04-26
 

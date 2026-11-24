@@ -8,6 +8,14 @@ A lightweight desktop screen recorder built for bug reports and tutorials. Recor
 
 Built with [Tauri v2](https://tauri.app), React 19, and Rust. Runs on Windows 10 and 11.
 
+<p align="center">
+  <img src="docs/screenshots/editor.png" alt="The frame editor with a rectangle, an arrow and a blurred email address drawn on a frame" width="720" />
+</p>
+
+| Player | Frames |
+| --- | --- |
+| ![The Player with scrubber, trim and export controls](docs/screenshots/player.png) | ![The Frames grid showing every frame of a recording](docs/screenshots/frames.png) |
+
 Everything stays on your computer: Glattice makes no network connections and collects nothing. See [PRIVACY.md](PRIVACY.md).
 
 ---

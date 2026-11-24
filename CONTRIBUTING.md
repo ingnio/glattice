@@ -58,6 +58,10 @@ If you changed anything visible, run the app and try it.
 - Add a line to the `Unreleased` section of [CHANGELOG.md](CHANGELOG.md) for anything a user would notice.
 - If you add or update a dependency, regenerate [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) so its license is listed.
 
+## Releases
+
+Maintainers: the steps for cutting a release are in [docs/RELEASING.md](docs/RELEASING.md).
+
 ## Licensing
 
 By contributing you agree that your contribution is licensed under the [MIT License](LICENSE).
