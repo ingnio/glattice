@@ -4,7 +4,7 @@
   <img src="src/assets/glattice-logo.png" alt="Glattice" width="200" />
 </p>
 
-A lightweight desktop screen recorder built for bug reports and tutorials. Record your screen, annotate individual frames, then export as an animated GIF, MP4/WebM, or a sprite sheet you can paste directly into a GitHub issue.
+A lightweight screen recorder and screenshot tool for bug reports, how-tos and tutorials. Record your screen or grab a single picture, mark it up, and share it as an animated GIF, a video, an annotated image, or a numbered step-by-step guide.
 
 Built with [Tauri v2](https://tauri.app), React 19, and Rust. Runs on Windows 10 and 11.
 
@@ -17,6 +17,16 @@ Built with [Tauri v2](https://tauri.app), React 19, and Rust. Runs on Windows 10
 | ![The Player with scrubber, trim and export controls](docs/screenshots/player.png) | ![The Frames grid showing every frame of a recording](docs/screenshots/frames.png) |
 
 Everything stays on your computer: Glattice makes no network connections and collects nothing. See [PRIVACY.md](PRIVACY.md).
+
+---
+
+## What you can do with it
+
+- **Record a GIF or video** of the whole screen or a region, with click rings, key presses and the cursor shown.
+- **Take a screenshot** and mark it up straight away with arrows, text, blur and numbered steps.
+- **Edit any frame**: annotate, redact, reorder, trim, or hold a frame on screen longer.
+- **Turn a recording into a guide**: one numbered close-up per click, with captions, exported as an image, a web page or Markdown.
+- **Export** as GIF, MP4, WebM, a sprite sheet, or a single frame, or copy a frame to the clipboard.
 
 ---
 
@@ -35,57 +45,65 @@ To build it yourself instead, see [Building](#building).
 ### Recording
 - **Full-screen or region capture** — drag to select any area, or snap to a detected window
 - **Configurable FPS** — presets (2 / 5 / 10 / 15 / 30) plus a custom input
-- **Click indicators** — animated ripple rings baked into the output (left = amber, right = red, middle = purple)
+- **Click indicators** — animated rings at each click (left = amber, right = red, middle = purple)
 - **Key press display** — recent keystrokes shown as on-screen chips (e.g. `Ctrl+S`)
-- **Cursor overlay** — cursor re-drawn on top of all edits so it stays sharp; can be off, baked, or overlay
-- **Audio recording** — optional microphone capture, muxed into MP4 / WebM exports
-- **Screenshots** — switch the Record button to Screenshot from its chevron to grab one picture and open it straight in the editor
+- **Cursor** — off, part of the picture, or drawn on top of your edits so a blur can never hide it
+- **Audio recording** — optional microphone capture, included in MP4 / WebM exports
 - **Countdown timer** — 0–10 s delay before capture starts, shown on screen where the recording will happen
 - **Recording strip** — while recording, Glattice shrinks to a small always-on-top strip with the timer, Stop and Discard; it never appears in the recording
 - **Global hotkey** — `Ctrl+Shift+R` starts and stops a recording from anywhere
 
+### Screenshots
+- **One button, two modes** — the chevron on the Record button switches it between **Record** and **Screenshot**; the choice lasts until you change it or restart
+- **Whole screen or a region** — in Screenshot mode, drawing a region takes the picture immediately
+- **Straight to the editor** — a screenshot opens ready to mark up, copy or export; Glattice keeps itself out of the picture
+- **Same hotkey** — `Ctrl+Shift+R` does whichever the button is set to
+
 ### Editing
-- **Per-frame annotation tools** — arrows, rectangles, ellipses, freehand lines, and text labels
-- **Step numbers** — click to drop numbered markers (1, 2, 3…) that point out steps in order
-- **Image overlay** — insert a PNG/JPG/WebP image onto any frame; drag to move, drag corners to resize; baked into all exports including sprite sheets
-- **Blur** — drag a region to apply Gaussian blur (radius 2–40 px) for privacy
-- **Simplify** — AI-style text redaction: detects text blocks and replaces them with solid rounded shapes; tunable block size, threshold, merge, and roundness
-- **Spotlight** — darkening vignette around the cursor; configurable radius and opacity; applied consistently across player, editor, video export, and sprite sheet
-- **Per-frame hold time** — add extra pause duration to individual frames directly from the player; reflected in MP4/WebM mux timing
-- **Trim** — set in/out points with `I` / `O` keys (or drag the scrubber handles); trimmed frames are left out of playback, the editor and every export, and the trim follows its frames when you delete or reorder
-- **Delete and restore frames** — remove frames from the clip and bring them back later
+- **Annotation tools** — arrows, rectangles, ellipses, freehand lines, and text labels
+- **Step numbers** — click to drop numbered markers (1, 2, 3…) that point out steps in order; drag one to move it
+- **Image overlay** — insert a PNG/JPG/WebP image onto any frame; drag to move, drag corners to resize
+- **Blur** — drag a region to blur it for privacy
+- **Simplify** — replaces text and detail in a region with plain rounded shapes, hiding the content while keeping the layout
+- **Spotlight** — dims everything outside a circle around the cursor; switch it per recording
+- **Hold a frame longer** — right-click a frame in Frames to keep it on screen for extra time in playback and exports
+- **Trim** — set in/out points with `I` / `O` (or drag the scrubber handles); trimmed frames are left out of playback, the editor and every export, and the trim follows its frames when you delete or reorder
+- **Delete, restore and reorder frames** — drag frames into a new order; removed frames can be brought back
 - **Undo and redo** — `Ctrl+Z` and `Ctrl+Y` on the current frame's edits
-- **Tool shortcuts** — single letters pick editor tools; press `?` anywhere for the full shortcut list
+- **Styles carry forward** — the colour and size you set are used for the next thing you draw
 - **Copy edits to all frames** — apply the current frame's annotations to every frame at once
+- **Keyboard shortcuts** — single letters pick editor tools; press `?` anywhere for the full list
 
 ### Steps
 - **Step-by-step guides** — the Steps tab turns a recording into a numbered guide: one close-up per click, each with a caption you can edit
 - **Two ways to make steps** — from the clicks captured while recording (turn on *Show clicks*), or by placing numbers yourself with the Step number tool
-- **Share it** — export as a single image, a self-contained web page, or Markdown with pictures for an issue or a wiki
+- **Tidy it up** — reorder or remove steps, or open a step's frame in the editor to blur or annotate it
+- **Share it** — export as a single image, a self-contained web page, or Markdown with pictures for an issue or a wiki; or copy the guide as an image
 
 ### Playback
-- **Player** with scrubber, loop / boomerang / play-once modes; loop mode, speed, and play state persist across view navigation
-- **Speed control** — 0.25× to 4× playback multiplier
-- **Frames grid** — thumbnail overview with multi-frame selection (click / Ctrl+click / Shift+click range); Ctrl+scroll to zoom the grid; right-click context menu with per-frame actions and Properties
-- **Live sheet preview** — grid layout updates in real time as you adjust columns, padding, border, background, and annotation settings
-- **Frame editor** — full-size per-frame editing with resize handles on every annotation
+- **Player** with scrubber and loop / back-and-forth / play-once modes
+- **Speed control** — 0.25× to 4×
+- **Frames grid** — thumbnail overview with multi-frame selection (click / Ctrl+click / Shift+click); Ctrl+scroll to zoom; right-click a frame to copy it, hold it longer, or delete it
+- **Sheet layout** — columns, padding, border, background and frame labels for the sprite sheet, previewed live in the grid
 
 ### Export
 | Format | Notes |
 |--------|-------|
 | **Animated GIF** | Includes your edits, trim, frame order and overlays; high-quality option via gifski (see below) |
-| **MP4** | H.264 + AAC, WebCodecs-based encoding in-browser |
+| **MP4** | H.264 + AAC, encoded with WebCodecs |
 | **WebM** | VP9 + Opus |
-| **Sprite sheet** | PNG / JPEG / WebP; configurable columns, padding, borders, frame number / timestamp annotations |
+| **Sprite sheet** | PNG / JPEG / WebP; configurable columns, padding, borders, frame number / timestamp labels |
+| **Single frame** | PNG / JPEG / WebP from the editor, or copied to the clipboard (`Ctrl+C`) |
+| **Guide** | Image, web page, or Markdown with pictures, from the Steps tab |
 
 - **Drag-out** — drag an unedited recording straight from the Player into Slack, Discord, a file manager, or a browser upload field
 - **Save dialog** — choose the destination each time; an optional save folder sets where it starts
 - **Export feedback** — progress while encoding, then a confirmation with **Show in folder**
 
-### UI
+### Interface
 - **Compact layout** — a small, dense home window; toggle from Home or Settings
 - **Light / dark / system theme**
-- **Recent history** — last 20 recordings / imports with thumbnails
+- **Recent** — your latest recordings, screenshots and opened files, with thumbnails
 
 ---
 
