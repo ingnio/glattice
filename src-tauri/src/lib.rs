@@ -460,6 +460,41 @@ fn stop_recording(
         t0.elapsed()
     );
 
+    let id = finish_recording(app, recording, high_quality, &state);
+    dlog!(
+        "[stop_recording] returned handle id={id} in {:?}",
+        t0.elapsed()
+    );
+    Ok(id)
+}
+
+/// Take a single still of the screen (or the selected region) and load
+/// it exactly as a one-frame recording, so the Editor, Steps and every
+/// export work on it unchanged. Emits the same `recording-ready` /
+/// `recording-error` events as `stop_recording`.
+#[tauri::command]
+fn capture_screenshot(app: tauri::AppHandle, state: State<'_, AppState>) -> AppResult<u64> {
+    let region = *state.region.lock();
+    if region.is_none() {
+        if let Ok(Some(idx)) = capture::cursor_monitor() {
+            *state.monitor_index.lock() = Some(idx);
+        }
+    }
+    let monitor_index = *state.monitor_index.lock();
+    dlog!("[capture_screenshot] region={region:?} monitor={monitor_index:?}");
+    let recording = capture::capture_once(region, monitor_index)?;
+    Ok(finish_recording(app, recording, None, &state))
+}
+
+/// Encode a finished capture, write its thumbnails and player frames,
+/// and make it the loaded clip. Runs on a background thread and reports
+/// through events; returns the new clip's id straight away.
+fn finish_recording(
+    app: tauri::AppHandle,
+    recording: capture::Recording,
+    high_quality: Option<bool>,
+    state: &AppState,
+) -> u64 {
     let id = state.next_id();
     let quality = if high_quality.unwrap_or(false) {
         gif_codec::Quality::High
@@ -470,8 +505,6 @@ fn stop_recording(
     // Spawn the encode + thumbs work on rayon so it runs off any Tauri
     // runtime thread, and so we can hold the whole Recording by value.
     let app_bg = app.clone();
-    let state_handle: tauri::State<'_, AppState> = state;
-    let _ = state_handle; // we don't capture the state; we re-fetch in the task
     rayon::spawn(move || {
         let t_task = std::time::Instant::now();
         let result = (|| -> AppResult<RecordingInfo> {
@@ -578,11 +611,7 @@ fn stop_recording(
         }
     });
 
-    dlog!(
-        "[stop_recording] returned handle id={id} in {:?}",
-        t0.elapsed()
-    );
-    Ok(id)
+    id
 }
 
 /// Stop capture and throw the take away: no encode, no thumbnails, no
@@ -1988,6 +2017,7 @@ pub fn run() {
             start_recording,
             stop_recording,
             discard_recording,
+            capture_screenshot,
             set_recording_strip,
             reveal_in_folder,
             load_gif,

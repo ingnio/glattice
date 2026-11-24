@@ -290,6 +290,31 @@ impl CaptureState {
 
 /// Geometry of the monitor at `idx` in `Monitor::all()`. `None` falls
 /// back to the OS-reported primary monitor (or the first available).
+/// Capture one still frame, with no cursor, as a one-frame recording.
+pub fn capture_once(region: Option<Region>, monitor_index: Option<usize>) -> AppResult<Recording> {
+    let monitor = pick_monitor(monitor_index)?;
+    let img = match region {
+        Some(r) => monitor.capture_region(r.x, r.y, r.width, r.height),
+        None => monitor.capture_image(),
+    }
+    .map_err(|e| AppError::Other(format!("could not capture the screen: {e}")))?;
+    let width = img.width();
+    let height = img.height();
+    Ok(Recording {
+        fps: 1,
+        frames: vec![CapturedFrame {
+            width,
+            height,
+            rgba: img.into_raw(),
+            elapsed_ms: 0,
+            cursor: None,
+        }],
+        input_events: Vec::new(),
+        audio: None,
+        cursor_baked: false,
+    })
+}
+
 pub fn monitor_geometry(idx: Option<usize>) -> AppResult<(u32, u32, i32, i32, f32)> {
     let m = pick_monitor(idx)?;
     let w = m

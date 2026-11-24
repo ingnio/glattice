@@ -680,6 +680,73 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [countdown, cancelCountdown]);
 
+  // ——— screenshot ———
+  // One still frame, opened straight in the Editor to mark up. It is
+  // loaded as a one-frame clip, so everything else works on it as usual.
+  const handleScreenshot = useCallback(async () => {
+    if (startingRef.current || isRecordingRef.current) return;
+    startingRef.current = true;
+    setError(null);
+    const win = getCurrentWindow();
+    // Keep Glattice itself out of the picture.
+    await win.setContentProtected(true).catch(() => {});
+    await new Promise((r) => setTimeout(r, 120));
+    setBusy("Taking screenshot…");
+
+    const ready = new Promise<RecordingInfo>((resolve, reject) => {
+      let r: (() => void) | null = null;
+      let e: (() => void) | null = null;
+      const clean = () => {
+        r?.();
+        e?.();
+      };
+      listen<RecordingInfo>("recording-ready", (event) => {
+        clean();
+        resolve(event.payload);
+      }).then((fn) => {
+        r = fn;
+      });
+      listen<{ message: string }>("recording-error", (event) => {
+        clean();
+        reject(new Error(event.payload.message));
+      }).then((fn) => {
+        e = fn;
+      });
+    });
+
+    try {
+      await api.captureScreenshot();
+      // The frame is captured by the time that call returns; Glattice can
+      // show up in captures again while the picture is prepared.
+      await win.setContentProtected(false).catch(() => {});
+      const info = await ready;
+      setSource({ kind: "recording", info });
+      setSourceTime(Date.now());
+      const thumbList = await loadThumbs();
+      addHistoryEntry({
+        id: Date.now(),
+        gifPath: info.path,
+        thumbPath: thumbList[0]?.path ?? "",
+        createdAt: Date.now(),
+        width: info.width,
+        height: info.height,
+        frameCount: info.frameCount,
+        durationMs: info.durationMs,
+        fps: info.fps,
+        fromRecording: true,
+      }).then(setHistory).catch(() => {});
+      setZoomIndex(thumbList[0]?.index ?? 0);
+      setCompactNavOpen(false);
+      setView("zoom");
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      await win.setContentProtected(false).catch(() => {});
+      setBusy(null);
+      startingRef.current = false;
+    }
+  }, [loadThumbs]);
+
   // ——— stop recording ———
   const handleStop = useCallback(async () => {
     api.hideRecordingIndicator().catch(() => {});
@@ -1295,6 +1362,7 @@ export default function App() {
             removeHistoryEntry(id).then(setHistory).catch(() => {})
           }
           onRecord={handleRecord}
+          onScreenshot={handleScreenshot}
           onSelectRegion={handleSelectRegion}
           onClearRegion={handleClearRegion}
           onConfig={() => setView("config")}

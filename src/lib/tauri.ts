@@ -146,6 +146,10 @@ export const api = {
     invoke<number>("stop_recording", { highQuality }),
   /** Stop capturing and throw the take away without encoding it. */
   discardRecording: () => invoke<void>("discard_recording"),
+  /** Capture one still of the screen (or the selected region) and load
+   *  it as a one-frame clip. Reports through `recording-ready` /
+   *  `recording-error`, like `stopRecording`. */
+  captureScreenshot: () => invoke<number>("capture_screenshot"),
   /** Shrink the main window into the small always-on-top recording
    *  strip (`active`, with its content size in logical px), or give it
    *  back its normal constraints. */

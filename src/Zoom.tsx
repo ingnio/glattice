@@ -1310,7 +1310,10 @@ export default function Zoom({
         {/* Left cell is empty on purpose: it balances the actions on the
             right so the frame stepper stays centred. */}
         <span aria-hidden="true" />
-        <div className="zoom__controls-nav">
+        <div
+          className="zoom__controls-nav"
+          style={thumbs.length <= 1 ? { visibility: "hidden" } : undefined}
+        >
           <button
             type="button"
             className="icon-btn"
@@ -1355,10 +1358,11 @@ export default function Zoom({
           >
             <IconSave size={18} />
           </button>
-          <span className="zoom__controls-sep" aria-hidden="true" />
+          {thumbs.length > 1 && <span className="zoom__controls-sep" aria-hidden="true" />}
           <button
             type="button"
             className="icon-btn icon-btn--danger"
+            style={thumbs.length <= 1 ? { display: "none" } : undefined}
             onClick={deleteFrame}
             title="Delete this frame. You can restore it from the Frames tab"
             aria-label="Delete frame"

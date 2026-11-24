@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
+  IconCamera,
   IconChevron,
   IconCompact,
   IconConfig,
@@ -24,6 +25,8 @@ interface Props {
   onOpenHistory: (path: string) => void;
   onRemoveHistory: (id: number) => void;
   onRecord: () => void;
+  /** Capture one still and open it in the Editor. */
+  onScreenshot: () => void;
   onSelectRegion: () => void;
   onClearRegion: () => void;
   onConfig: () => void;
@@ -44,6 +47,7 @@ export default function Home({
   onOpenHistory,
   onRemoveHistory,
   onRecord,
+  onScreenshot,
   onSelectRegion,
   onClearRegion,
   onConfig,
@@ -188,6 +192,16 @@ export default function Home({
               <button
                 type="button"
                 className="btn btn--sm"
+                onClick={onScreenshot}
+                disabled={supported === false}
+                title="Take one picture of this region and open it to mark up"
+              >
+                <IconCamera size={14} />
+                Screenshot
+              </button>
+              <button
+                type="button"
+                className="btn btn--sm"
                 onClick={onSelectRegion}
                 title="Draw a different region"
               >
@@ -234,6 +248,20 @@ export default function Home({
                 </div>
               </button>
             </div>
+
+            {/* A quiet third option rather than a third card: one line,
+                in both layouts. */}
+            <button
+              type="button"
+              className="home2__snap"
+              onClick={onScreenshot}
+              disabled={supported === false}
+              title="Take one picture of the screen and open it in the Editor to mark up"
+            >
+              <IconCamera size={15} />
+              <span className="home2__snap-label">Screenshot</span>
+              <span className="home2__snap-hint muted">one picture, opened to mark up</span>
+            </button>
 
             <p className="home2__tip muted">
               <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> starts and stops
