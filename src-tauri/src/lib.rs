@@ -1950,6 +1950,21 @@ pub fn run() {
                 *state.pending_file.lock() = Some(gif);
             }
 
+            // The main window starts hidden and the frontend shows it once
+            // it has drawn at its real size (no blank flash at launch). If
+            // the frontend never gets that far, show the window anyway so
+            // the app can't end up running with nothing on screen.
+            let reveal_handle = app.handle().clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_secs(4));
+                if let Some(win) = reveal_handle.get_webview_window("main") {
+                    if !win.is_visible().unwrap_or(true) {
+                        dlog!("[setup] frontend did not show the window; showing it");
+                        let _ = win.show();
+                    }
+                }
+            });
+
             // Watchdog: while the recording indicator is supposed to be
             // visible, periodically re-raise it to the top of Windows'
             // topmost group so no other always-on-top window occludes it.

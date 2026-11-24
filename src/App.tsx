@@ -277,6 +277,7 @@ export default function App() {
     }
   }, [isRecording]);
 
+  const revealedRef = useRef(false);
   useEffect(() => {
     if (!prefsLoaded) return;
     // The recording strip owns the window size while a take is running.
@@ -342,9 +343,22 @@ export default function App() {
     }
 
     if (target) {
-      getCurrentWindow()
+      const win = getCurrentWindow();
+      win
         .setSize(target)
-        .catch(() => {});
+        .catch(() => {})
+        .then(() => {
+          // The window starts hidden (tauri.conf.json) so nobody sees a
+          // blank, wrong-sized frame while the app loads. Reveal it the
+          // first time it has its real size and content. Rust shows it
+          // anyway after a few seconds in case this never runs.
+          if (revealedRef.current) return;
+          revealedRef.current = true;
+          win
+            .show()
+            .then(() => win.setFocus())
+            .catch(() => {});
+        });
     }
   }, [prefsLoaded, prefs.compactUi, view, source, homeMeasure, error, isRecording]);
 
