@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
+import {
+  currentMonitor,
+  getCurrentWindow,
+  LogicalSize,
+  PhysicalPosition,
+} from "@tauri-apps/api/window";
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { copyFile, writeFile } from "@tauri-apps/plugin-fs";
 import RegionOverlay from "./RegionOverlay";
@@ -74,6 +79,36 @@ function baseName(path: string): string {
 function samePath(a: string, b: string): boolean {
   const norm = (p: string) => p.replace(/[/\\]+/g, "/").toLowerCase();
   return norm(a) === norm(b);
+}
+
+/** Move the window, if needed, so all of it sits inside the monitor's
+ *  work area (the screen minus the taskbar). It only ever moves the
+ *  window; if the window is larger than the work area, the top-left
+ *  corner wins so the title bar stays reachable. */
+async function keepWindowOnScreen(): Promise<void> {
+  try {
+    const win = getCurrentWindow();
+    const [monitor, pos, size] = await Promise.all([
+      currentMonitor(),
+      win.outerPosition(),
+      win.outerSize(),
+    ]);
+    if (!monitor) return;
+    const area = monitor.workArea;
+    const x = Math.max(
+      area.position.x,
+      Math.min(pos.x, area.position.x + area.size.width - size.width),
+    );
+    const y = Math.max(
+      area.position.y,
+      Math.min(pos.y, area.position.y + area.size.height - size.height),
+    );
+    if (x !== pos.x || y !== pos.y) {
+      await win.setPosition(new PhysicalPosition(x, y));
+    }
+  } catch {
+    // Best effort: a window that can't be measured is left where it is.
+  }
 }
 
 export default function App() {
@@ -349,6 +384,10 @@ export default function App() {
       win
         .setSize(target)
         .catch(() => {})
+        // Resizing keeps the top-left corner where it was, so a window
+        // that grows (a big recording opening in the Player) can end up
+        // hanging off the bottom or right of the screen. Slide it back.
+        .then(() => keepWindowOnScreen())
         .then(() => {
           // The window starts hidden (tauri.conf.json) so nobody sees a
           // blank, wrong-sized frame while the app loads. Reveal it the
