@@ -544,6 +544,26 @@ export default function Zoom({
       // click drops the next number. Nothing is selected afterwards, so
       // clicking again simply places the one after it.
       if (tool === "step") {
+        // Pressing on a marker that is already there grabs it instead of
+        // stacking a new one on top: drag to move it, as with Select.
+        let hit: number | null = null;
+        for (let i = frameEdits.length - 1; i >= 0; i--) {
+          if (frameEdits[i].kind === "step" && hitEdit(frameEdits[i], p.x, p.y, hitTol)) {
+            hit = i;
+            break;
+          }
+        }
+        if (hit !== null) {
+          setSelectedIdx(hit);
+          canvas.setPointerCapture(evt.pointerId);
+          selectOpRef.current = {
+            kind: "move",
+            original: cloneEditShallow(frameEdits[hit]),
+            startPt: p,
+            idx: hit,
+          };
+          return;
+        }
         setSelectedIdx(null);
         commitEdit({
           kind: "step",
@@ -1476,7 +1496,7 @@ const KIND_NAMES: Record<Edit["kind"], string> = {
 // One-line "how do I use this" for each tool, shown in the options strip.
 const TOOL_HINTS: Record<EditTool, string> = {
   select: "Click an edit to select it. Double-click text to change it.",
-  step: "Click to place 1, then 2, then 3… Use Select to move one, Delete to remove it.",
+  step: "Click to place 1, then 2, then 3… Drag a number to move it; Delete removes the selected one.",
   rect: "Drag to draw. Then drag the box or a corner to adjust it.",
   ellipse: "Drag to draw. Then drag the shape or a corner to adjust it.",
   arrow: "Drag from the tail to the tip.",
