@@ -913,21 +913,33 @@ export default function App() {
     async (picked: RegionInput | null) => {
       const prev = overlayPrev;
       if (!prev) return;
+      // In Screenshot mode, drawing a region IS taking the picture: snap
+      // it and go straight to the Editor, rather than coming back to Home
+      // to press another button.
+      const snapNow = picked !== null && captureModeRef.current === "screenshot";
       try {
         await api.leaveRegionOverlay(prev);
         if (picked) {
           await api.setRegion(picked);
-          setRegion(picked);
           // The recording indicator dims everything outside the region and
           // stays topmost, so it is shown only once recording starts.
+          if (!snapNow) setRegion(picked);
         }
       } catch (e) {
         setError(String(e));
       } finally {
         setOverlayPrev(null);
       }
+      if (snapNow) {
+        // Let the selection overlay finish leaving the screen first.
+        await new Promise((r) => setTimeout(r, 250));
+        await handleScreenshot();
+        // The region was for this one picture; don't leave it armed.
+        await api.clearRegion().catch(() => {});
+        setRegion(null);
+      }
     },
-    [overlayPrev],
+    [overlayPrev, handleScreenshot],
   );
 
   // ——— ordered thumb views ———

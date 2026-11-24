@@ -245,7 +245,7 @@ export default function Home({
                 </div>
                 <div className="action-card__title">Select region</div>
                 <div className="action-card__subtitle">
-                  Record just an area
+                  {captureMode === "screenshot" ? "Snap just an area" : "Record just an area"}
                 </div>
               </button>
             </div>
