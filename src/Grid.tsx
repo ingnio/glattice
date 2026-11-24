@@ -5,7 +5,7 @@ import { FrameEdits, getFrameEdits } from "./lib/edits";
 import { drawAnnotation, drawClicks, drawCursor, drawKeys, drawSpotlight, paintEdit } from "./lib/paintEdits";
 import { AnnotationPos, SheetDraft, SpotlightDraft } from "./lib/prefs";
 import { TrimRange } from "./lib/trim";
-import { IconCopy, IconEye, IconInfo, IconPlus, IconTrash, IconX } from "./icons";
+import { IconCopy, IconEye, IconLayout, IconInfo, IconPlus, IconTrash, IconX } from "./icons";
 
 interface Props {
   thumbs: FrameThumb[];
@@ -110,10 +110,16 @@ export default function Grid({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Delete" && e.key !== "Backspace") return;
-      if (selectedSet.size === 0) return;
       const target = e.target as HTMLElement;
       if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
+      // Ctrl+C copies the selected frame as an image (one frame: the
+      // clipboard holds a single image).
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") {
+        if (selectedSet.size === 1) onCopy([...selectedSet][0]);
+        return;
+      }
+      if (e.key !== "Delete" && e.key !== "Backspace") return;
+      if (selectedSet.size === 0) return;
       onDelete([...selectedSet]);
       setSelectedSet(new Set());
       lastClickedPosRef.current = null;
@@ -121,7 +127,7 @@ export default function Grid({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selectedSet, onDelete]);
+  }, [selectedSet, onDelete, onCopy]);
 
   // ——— drag-to-reorder ———
   const gridRef = useRef<HTMLDivElement | null>(null);
@@ -237,12 +243,13 @@ export default function Grid({
           )}
           <button
             type="button"
-            className={`chip ${sheetBarOpen ? "chip--active" : ""}`}
+            className={`icon-btn ${sheetBarOpen ? "icon-btn--active" : ""}`}
             onClick={() => setSheetBarOpen((o) => !o)}
             aria-expanded={sheetBarOpen}
-            title="Sprite sheet layout: columns, padding, background and labels"
+            aria-label="Sheet layout"
+            title="Sheet layout: columns, padding, background and labels for the sprite sheet"
           >
-            Sheet layout
+            <IconLayout size={18} />
           </button>
           <button
             type="button"

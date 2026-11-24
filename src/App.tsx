@@ -1346,6 +1346,7 @@ export default function App() {
           onBack={() => setView("grid")}
           onNavigate={setZoomIndex}
           onDelete={(idx) => changeFrameOrder((o) => o.filter((i) => i !== idx))}
+          onCopyFrame={handleCopyFrame}
           onEditsChange={setEdits}
           onSimplifyChange={updateSimplify}
           exportPath={defaultExportPath(`${exportStem}-frame`)}

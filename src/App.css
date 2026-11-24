@@ -2120,6 +2120,61 @@ body {
   border-radius: 999px;
 }
 
+/* Sheet layout is a toggle: show clearly when its strip is open. */
+.grid-view__tools .icon-btn.icon-btn--active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, var(--bg-elev));
+}
+
+/* Player and Editor: the same bordered circles as Frames and Home. */
+.player__chrome-right .icon-btn,
+.zoom__bar .icon-btn,
+.zoom__controls .icon-btn {
+  border-radius: 999px;
+  border-color: var(--border);
+  background: var(--bg-elev);
+  color: var(--text-dim);
+}
+
+.zoom__bar .icon-btn:hover:not(:disabled),
+.zoom__controls .icon-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+/* Export is the Player's main action, so its circle is filled. */
+.player__chrome-right .icon-btn.player__export-btn {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.player__chrome-right .icon-btn.player__export-btn:hover:not(:disabled) {
+  filter: brightness(1.08);
+  color: #fff;
+}
+
+/* Editor frame bar: [ spacer | prev · counter · next | copy export · delete ]. */
+.zoom__controls-actions {
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.zoom__controls-sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--border);
+}
+
+.zoom__controls .icon-btn.icon-btn--danger:hover:not(:disabled) {
+  color: var(--danger, #ef4444);
+  border-color: var(--danger, #ef4444);
+}
+
 .player__chrome-right .icon-btn:hover:not(:disabled),
 .grid-view__tools .icon-btn:hover:not(:disabled),
 .zoom__tools .icon-btn:hover:not(:disabled) {

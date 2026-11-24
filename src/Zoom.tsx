@@ -27,6 +27,7 @@ import {
   IconImageAdd,
   IconRectTool,
   IconSave,
+  IconCopy,
   IconSpotlight,
   IconSimplify,
   IconText,
@@ -48,6 +49,8 @@ interface Props {
   onBack: () => void;
   onNavigate: (index: number) => void;
   onDelete: (index: number) => void;
+  /** Copy a frame to the clipboard as an image, edits included. */
+  onCopyFrame: (index: number) => void;
   onEditsChange: (edits: FrameEdits) => void;
   onSimplifyChange: (update: Partial<SimplifyDraft>) => void;
   /** Suggested save path for "Export frame", without the frame number
@@ -71,6 +74,7 @@ export default function Zoom({
   onBack,
   onNavigate,
   onDelete,
+  onCopyFrame,
   onEditsChange,
   onSimplifyChange,
   exportPath,
@@ -237,6 +241,8 @@ export default function Zoom({
         else undo();
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
         redo();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") {
+        if (current) onCopyFrame(current.index);
       } else if (!e.ctrlKey && !e.metaKey && !e.altKey) {
         // Single letters pick a tool (listed in ShortcutsModal).
         const picked = TOOL_KEYS[e.key.toLowerCase()];
@@ -254,6 +260,7 @@ export default function Zoom({
     onBack,
     onNavigate,
     onDelete,
+    onCopyFrame,
     current,
     drafting,
     edits,
@@ -835,6 +842,12 @@ export default function Zoom({
     setImageRevision((r) => r + 1);
   }, [current, imgSize, frameEdits, commitEdit]);
 
+  // Right-click menu on the frame.
+  const [frameMenu, setFrameMenu] = useState<{ x: number; y: number } | null>(null);
+  const copyFrame = useCallback(() => {
+    if (current) onCopyFrame(current.index);
+  }, [current, onCopyFrame]);
+
   const saveFrame = useCallback(async () => {
     if (!current || !imgSize) return;
     const img = imgRef.current;
@@ -1140,7 +1153,18 @@ export default function Zoom({
           )}
       </div>
 
-      <div className="zoom__stage" ref={stageRef}>
+      <div
+        className="zoom__stage"
+        ref={stageRef}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          // Keep the menu on screen near the right and bottom edges.
+          setFrameMenu({
+            x: Math.min(e.clientX, window.innerWidth - 180),
+            y: Math.min(e.clientY, window.innerHeight - 130),
+          });
+        }}
+      >
         <div className="editor-surface" ref={surfaceRef}>
           <img
             ref={imgRef}
@@ -1225,15 +1249,9 @@ export default function Zoom({
 
       {/* Frame bar: everything that acts on the whole frame. */}
       <div className="zoom__controls">
-        <button
-          type="button"
-          className="btn btn--sm btn--ghost zoom__controls-start"
-          onClick={deleteFrame}
-          title="Delete this frame. You can restore it from the Frames tab"
-        >
-          <IconTrash size={14} />
-          Delete frame
-        </button>
+        {/* Left cell is empty on purpose: it balances the actions on the
+            right so the frame stepper stays centred. */}
+        <span aria-hidden="true" />
         <div className="zoom__controls-nav">
           <button
             type="button"
@@ -1257,17 +1275,83 @@ export default function Zoom({
             <IconNext />
           </button>
         </div>
-        <button
-          type="button"
-          className="btn btn--sm zoom__controls-end"
-          onClick={saveFrame}
-          disabled={saving}
-          title="Export this frame as an image"
-        >
-          <IconSave size={14} />
-          {saving ? "Exporting…" : "Export frame"}
-        </button>
+        {/* Everything you can do with this frame, in one group. Delete
+            sits last and apart so it isn't hit by accident. */}
+        <div className="zoom__controls-actions">
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={copyFrame}
+            title="Copy this frame as an image (Ctrl+C)"
+            aria-label="Copy frame"
+          >
+            <IconCopy size={18} />
+          </button>
+          <button
+            type="button"
+            className={`icon-btn ${saving ? "icon-btn--busy" : ""}`}
+            onClick={saveFrame}
+            disabled={saving}
+            title={saving ? "Exporting…" : "Export this frame as an image file"}
+            aria-label="Export frame"
+          >
+            <IconSave size={18} />
+          </button>
+          <span className="zoom__controls-sep" aria-hidden="true" />
+          <button
+            type="button"
+            className="icon-btn icon-btn--danger"
+            onClick={deleteFrame}
+            title="Delete this frame. You can restore it from the Frames tab"
+            aria-label="Delete frame"
+          >
+            <IconTrash size={18} />
+          </button>
+        </div>
       </div>
+
+      {frameMenu !== null && (
+        <>
+          <div
+            className="context-menu__scrim"
+            onClick={() => setFrameMenu(null)}
+            onContextMenu={(e) => { e.preventDefault(); setFrameMenu(null); }}
+          />
+          <div
+            className="context-menu"
+            style={{ left: frameMenu.x, top: frameMenu.y }}
+            role="menu"
+          >
+            <button
+              type="button"
+              role="menuitem"
+              className="context-menu__item"
+              onClick={() => { setFrameMenu(null); copyFrame(); }}
+            >
+              <span className="context-menu__icon"><IconCopy size={13} /></span>
+              Copy image
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="context-menu__item"
+              onClick={() => { setFrameMenu(null); saveFrame(); }}
+            >
+              <span className="context-menu__icon"><IconSave size={13} /></span>
+              Export frame…
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="context-menu__item context-menu__item--danger"
+              onClick={() => { setFrameMenu(null); deleteFrame(); }}
+            >
+              <span className="context-menu__icon"><IconTrash size={13} /></span>
+              Delete frame
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

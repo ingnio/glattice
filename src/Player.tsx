@@ -575,14 +575,14 @@ export default function Player({
           <div className="player__save">
             <button
               type="button"
-              className="btn btn--sm btn--primary"
+              className="icon-btn player__export-btn"
               onClick={() => setSaveMenuOpen((o) => !o)}
               title="Export as GIF, MP4, WebM or a sprite sheet"
+              aria-label="Export"
               aria-haspopup="true"
               aria-expanded={saveMenuOpen}
             >
-              <IconSave size={14} />
-              Export
+              <IconSave size={18} />
             </button>
             {saveMenuOpen && (
               <>

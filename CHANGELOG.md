@@ -21,6 +21,11 @@
 
 ### Frames
 - Right-click a frame and choose **Copy image** to put it on the clipboard, with its edits and overlays
+- `Ctrl+C` copies the selected frame in Frames, or the current frame in the editor
+- The editor has a right-click menu on the frame: Copy image, Export frame, Delete frame
+- The editor's frame bar keeps the stepper centred and groups Copy, Export and Delete on the right
+- Toolbar buttons are round icon buttons throughout, including Export in the Player and Sheet layout in Frames
+- The browser's own right-click menu no longer appears
 
 ### Editor
 - Box tools (rectangle, ellipse, blur, simplify) move and resize their own boxes without switching to Select
