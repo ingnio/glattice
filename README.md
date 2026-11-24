@@ -9,7 +9,7 @@ A lightweight desktop screen recorder built for bug reports and tutorials. Recor
 Built with [Tauri v2](https://tauri.app), React 19, and Rust. Runs on Windows 10 and 11.
 
 <p align="center">
-  <img src="docs/screenshots/editor.png" alt="The frame editor with a rectangle, an arrow and a blurred email address drawn on a frame" width="720" />
+  <img src="docs/screenshots/editor.png" alt="The frame editor with numbered step markers and a blurred email address on a frame" width="720" />
 </p>
 
 | Player | Frames |

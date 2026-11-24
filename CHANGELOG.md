@@ -30,6 +30,8 @@
 ### Editor
 - Box tools (rectangle, ellipse, blur, simplify) move and resize their own boxes without switching to Select
 - New **Step number** tool (`N`): each click drops the next numbered marker (1, 2, 3…) for pointing out steps in order
+- With the Step tool active, drag an existing number to move it
+- Colour, size and blur strength carry forward: restyling an edit sets the style for the next one, across frames and visits to the editor
 - Letter keys pick tools; redo added (`Ctrl+Y`)
 - An options strip names the active tool and says how to use it
 
@@ -40,6 +42,8 @@
 - Frames explains its gestures and shows selection clearly; Sheet layout controls are labelled
 - Settings are grouped and reworded; the theme switch moved there
 - The window no longer flashes blank at launch
+- Home always fits its window: a long Recent list scrolls inside its own card
+- In the Player, `Esc` closes an open menu instead of jumping back to Home
 
 ### Project
 - The installer shows the MIT license; the separate EULA is gone
