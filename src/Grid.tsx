@@ -5,7 +5,7 @@ import { FrameEdits, getFrameEdits } from "./lib/edits";
 import { drawAnnotation, drawClicks, drawCursor, drawKeys, drawSpotlight, paintEdit } from "./lib/paintEdits";
 import { AnnotationPos, SheetDraft, SpotlightDraft } from "./lib/prefs";
 import { TrimRange } from "./lib/trim";
-import { IconEye, IconInfo, IconPlus, IconTrash, IconX } from "./icons";
+import { IconCopy, IconEye, IconInfo, IconPlus, IconTrash, IconX } from "./icons";
 
 interface Props {
   thumbs: FrameThumb[];
@@ -22,6 +22,8 @@ interface Props {
   /** `moved` is the frame that was dragged. */
   onReorder: (newOrder: number[], moved: number) => void;
   onDelete: (indices: number[]) => void;
+  /** Copy one frame to the clipboard as an image. */
+  onCopy: (index: number) => void;
   frameDelays: Record<number, number>;
   onDelayChange: (frameIndex: number, extraMs: number) => void;
   onInsertBlank: () => void;
@@ -42,6 +44,7 @@ export default function Grid({
   onZoom,
   onReorder,
   onDelete,
+  onCopy,
   frameDelays,
   onDelayChange,
   onInsertBlank,
@@ -549,6 +552,25 @@ export default function Grid({
                 {contextTargets.length} frames selected
               </div>
             )}
+            <button
+              type="button"
+              role="menuitem"
+              className="context-menu__item"
+              title={
+                contextTargets.length > 1
+                  ? "Copies the frame you right-clicked; the clipboard holds one image"
+                  : undefined
+              }
+              onClick={() => {
+                // The clipboard holds one image, so this is always the
+                // frame under the pointer, even with several selected.
+                onCopy(contextMenu.frameIdx);
+                closeContextMenu();
+              }}
+            >
+              <span className="context-menu__icon"><IconCopy size={13} /></span>
+              {contextTargets.length > 1 ? "Copy this frame" : "Copy image"}
+            </button>
             <button
               type="button"
               role="menuitem"

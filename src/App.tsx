@@ -26,6 +26,7 @@ import {
 
 import { encodeVideo, VideoFormat } from "./lib/encodeVideo";
 import { encodeGif } from "./lib/encodeGif";
+import { copyFrameToClipboard } from "./lib/copyFrame";
 import { applyTrim, remapTrim, TrimRange } from "./lib/trim";
 import { FrameEdits } from "./lib/edits";
 import {
@@ -859,6 +860,20 @@ export default function App() {
 
   // From the Player's and Editor's Spotlight controls. On/off belongs to
   // the clip; radius and darkness are remembered as the effect's look.
+  // Frames → right-click → Copy image. The frame goes to the clipboard
+  // as the Player shows it, edits and overlays included.
+  const handleCopyFrame = useCallback(
+    (index: number) => {
+      const all = orderedPlayerFrames.length > 0 ? orderedPlayerFrames : orderedThumbs;
+      const thumb = all.find((t) => t.index === index);
+      if (!thumb) return;
+      copyFrameToClipboard(thumb, { edits, inputEvents, spotlight })
+        .then(() => notify("Frame copied to the clipboard"))
+        .catch((e) => setError(String(e)));
+    },
+    [orderedPlayerFrames, orderedThumbs, edits, inputEvents, spotlight, notify],
+  );
+
   const handleSpotlightChange = useCallback(
     (update: Partial<SpotlightDraft>) => {
       const { enabled, ...look } = update;
@@ -1305,6 +1320,7 @@ export default function App() {
             setView("zoom");
           }}
           onReorder={changeFrameOrder}
+          onCopy={handleCopyFrame}
           onDelete={(indices) => {
             const toRemove = new Set(indices);
             changeFrameOrder((o) => o.filter((i) => !toRemove.has(i)));

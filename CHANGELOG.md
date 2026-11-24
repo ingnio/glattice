@@ -19,6 +19,9 @@
 - A frame dragged past a trim mark drops out of the clip; one dragged between the marks joins it
 - Trimmed-off frames are dimmed and tagged in Frames, and can't be opened in the editor
 
+### Frames
+- Right-click a frame and choose **Copy image** to put it on the clipboard, with its edits and overlays
+
 ### Editor
 - Box tools (rectangle, ellipse, blur, simplify) move and resize their own boxes without switching to Select
 - Letter keys pick tools; redo added (`Ctrl+Y`)
