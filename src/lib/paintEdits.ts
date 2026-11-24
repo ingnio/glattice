@@ -439,13 +439,17 @@ export function paintEdit(
     }
     case "blur": {
       if (e.w < 1 || e.h < 1) break;
-      // Snapshot the composited canvas so blur operates on all previously
-      // rendered content (image edits, shapes, etc.) — not just the raw
-      // source frame. Mirrors the Rust compositor which edits in-place.
+      // Build a composite snapshot: source frame first (origin-clean base),
+      // then the canvas overlays on top (image edits, shapes drawn so far).
+      // This works whether ctx.canvas is transparent (Zoom view, where the
+      // source is an <img> underneath) or already has the frame drawn
+      // (encodeVideo OffscreenCanvas). Drawing _img redundantly is harmless.
       const snap = document.createElement("canvas");
       snap.width = ctx.canvas.width;
       snap.height = ctx.canvas.height;
-      snap.getContext("2d")!.drawImage(ctx.canvas, 0, 0);
+      const snapCtx = snap.getContext("2d")!;
+      snapCtx.drawImage(_img, 0, 0);
+      snapCtx.drawImage(ctx.canvas, 0, 0);
       ctx.save();
       ctx.beginPath();
       ctx.rect(e.x, e.y, e.w, e.h);
@@ -477,12 +481,12 @@ export function paintEdit(
     }
     case "simplify": {
       if (e.w < 1 || e.h < 1) break;
-      // Snapshot the composited canvas so simplify reads previously rendered
-      // content (image edits, shapes, etc.) — not just the raw source frame.
       const snap = document.createElement("canvas");
       snap.width = ctx.canvas.width;
       snap.height = ctx.canvas.height;
-      snap.getContext("2d")!.drawImage(ctx.canvas, 0, 0);
+      const snapCtx = snap.getContext("2d")!;
+      snapCtx.drawImage(_img, 0, 0);
+      snapCtx.drawImage(ctx.canvas, 0, 0);
       const bands = detectTextBands(snap, e.x, e.y, e.w, e.h, {
         blockSize: e.blockSize,
         threshold: e.threshold,
