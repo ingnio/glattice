@@ -57,7 +57,12 @@
     "shortDescription": "Screen recorder and annotation tool",
     "longDescription": "Record your screen, annotate individual frames, then export as an animated GIF, MP4, WebM, or a sprite sheet.",
     "category": "GraphicsAndDesign",
-    "licenseFile": "../EULA.txt",
+    "licenseFile": "../LICENSE",
+    "resources": {
+      "../LICENSE": "LICENSE",
+      "../THIRD-PARTY-NOTICES.md": "THIRD-PARTY-NOTICES.md",
+      "assets/OFL.txt": "licenses/RobotoMono-OFL.txt"
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

@@ -40,8 +40,9 @@ operating system's file manager.
 
 Because Glattice can capture screen content and audio, you are
 responsible for complying with applicable recording consent laws in your
-jurisdiction before recording other people or their content. See
-Section 3 of the EULA for details.
+jurisdiction before recording other people or their content. That
+includes getting any consent the law requires, and following local rules
+on screen capture, audio recording and data privacy.
 
 ## Contact
 

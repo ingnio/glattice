@@ -109,4 +109,8 @@ The UI surfaces "High quality" GIF encoding automatically when the feature is co
 
 ## License
 
-MIT — except when built `--features gifski`, which links AGPL-3.0 code.
+MIT — see [LICENSE](LICENSE). This covers the source and the official installers.
+
+Building with `--features gifski` links AGPL-3.0 code, and a binary built that way is subject to the AGPL.
+
+Glattice bundles the Roboto Mono font (SIL Open Font License 1.1) and is built on open-source libraries. They are listed with their licenses in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md), which is also installed alongside the app.
