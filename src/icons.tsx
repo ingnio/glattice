@@ -356,6 +356,20 @@ export const IconPen = ({ size = defaults.size }: IconProps) =>
     </>,
   );
 
+/** A numbered list: step-by-step guide. */
+export const IconSteps = ({ size = defaults.size }: IconProps) =>
+  svg(
+    size,
+    <>
+      <line x1="10" y1="6" x2="21" y2="6" />
+      <line x1="10" y1="12" x2="21" y2="12" />
+      <line x1="10" y1="18" x2="21" y2="18" />
+      <circle cx="4.5" cy="6" r="1.8" />
+      <circle cx="4.5" cy="12" r="1.8" />
+      <circle cx="4.5" cy="18" r="1.8" />
+    </>,
+  );
+
 /** A numbered marker: a circle with a 1 in it. */
 export const IconStep = ({ size = defaults.size }: IconProps) =>
   svg(

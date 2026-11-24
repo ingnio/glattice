@@ -14,6 +14,8 @@ import Config from "./Config";
 import Player from "./Player";
 import Grid from "./Grid";
 import Zoom from "./Zoom";
+import Steps from "./Steps";
+import { Guide } from "./lib/steps";
 import SheetPreviewModal from "./SheetPreviewModal";
 import ErrorBanner from "./ErrorBanner";
 import RecordingStrip from "./RecordingStrip";
@@ -48,13 +50,13 @@ import {
   SpotlightDraft,
 } from "./lib/prefs";
 import "./App.css";
-import { IconGrid, IconHome, IconImage, IconMore, IconPlay } from "./icons";
+import { IconGrid, IconHome, IconImage, IconMore, IconPlay, IconSteps } from "./icons";
 
 type Source =
   | { kind: "recording"; info: RecordingInfo }
   | { kind: "gif"; info: GifInfo };
 
-type View = "home" | "config" | "player" | "grid" | "zoom";
+type View = "home" | "config" | "player" | "grid" | "zoom" | "steps";
 
 /** Content size of the window while it is the recording strip. */
 const STRIP_SIZE: [number, number] = [380, 56];
@@ -113,6 +115,9 @@ async function keepWindowOnScreen(): Promise<void> {
 
 export default function App() {
   const [view, setView] = useState<View>("home");
+  // The step-by-step guide for the loaded clip, once its Steps tab has
+  // been opened. Kept here so captions survive moving between tabs.
+  const [guide, setGuide] = useState<Guide | null>(null);
   const [zoomIndex, setZoomIndex] = useState<number | null>(null);
 
   const [supported, setSupported] = useState<boolean | null>(null);
@@ -356,6 +361,9 @@ export default function App() {
       }
     } else if (view === "config") {
       target = new LogicalSize(CONFIG_SIZE[0], CONFIG_SIZE[1]);
+    } else if (view === "steps") {
+      // A reading-width column, as tall as the screen comfortably allows.
+      target = new LogicalSize(Math.min(maxW, 620), Math.min(maxH, 860));
     } else if (
       (view === "player" || view === "grid" || view === "zoom") &&
       source
@@ -456,6 +464,7 @@ export default function App() {
       setPlayerLoop("loop");
       setPlayerSpeed(1);
       setTrim(null);
+      setGuide(null);
       setSpotlightOn(prefsRef.current.spotlight.enabled);
       try {
         setInputEvents(await api.listInputEvents());
@@ -1395,6 +1404,27 @@ export default function App() {
         />
       )}
 
+      {view === "steps" && source && (
+        <Steps
+          thumbs={editorThumbs}
+          edits={edits}
+          inputEvents={inputEvents}
+          guide={guide}
+          onGuideChange={setGuide}
+          defaultTitle={exportStem}
+          saveFolder={defaultExportPath("")}
+          onSaved={notifySaved}
+          onCopied={() => notify("Guide copied to the clipboard")}
+          onError={setError}
+          onOpenEditor={(i) => {
+            setZoomIndex(i);
+            setView("zoom");
+          }}
+          onOpenSettings={() => setView("config")}
+          compactNavButton={compactNavButton}
+        />
+      )}
+
       {showPreviewModal && (
         <SheetPreviewModal
           sheet={prefs.sheet}
@@ -1428,6 +1458,7 @@ export default function App() {
             setView("zoom");
             setCompactNavOpen(false);
           }}
+          onSteps={() => { if (source) setView("steps"); setCompactNavOpen(false); }}
         />
       )}
 
@@ -1478,6 +1509,16 @@ export default function App() {
             <IconImage size={20} />
             <span>Editor</span>
           </button>
+          <button
+            type="button"
+            className={`global-nav__item ${view === "steps" ? "global-nav__item--active" : ""}`}
+            onClick={() => source && setView("steps")}
+            disabled={!source}
+            title={source ? "Step-by-step guide" : "Record or open a GIF to unlock"}
+          >
+            <IconSteps size={20} />
+            <span>Steps</span>
+          </button>
         </nav>
       )}
 
@@ -1498,6 +1539,7 @@ interface CompactNavProps {
   onPlayer: () => void;
   onFrames: () => void;
   onEditor: () => void;
+  onSteps: () => void;
 }
 
 function CompactNav({
@@ -1508,12 +1550,14 @@ function CompactNav({
   onPlayer,
   onFrames,
   onEditor,
+  onSteps,
 }: CompactNavProps) {
   const items = [
     { label: "Home",   icon: <IconHome size={16} />,  active: view === "home" || view === "config", disabled: false,      action: onHome },
     { label: "Player", icon: <IconPlay size={16} />,  active: view === "player",                    disabled: !hasSource, action: onPlayer },
     { label: "Frames", icon: <IconGrid size={16} />,  active: view === "grid",                      disabled: !hasSource, action: onFrames },
     { label: "Editor", icon: <IconImage size={16} />, active: view === "zoom",                      disabled: !hasSource, action: onEditor },
+    { label: "Steps",  icon: <IconSteps size={16} />, active: view === "steps",                     disabled: !hasSource, action: onSteps },
   ];
 
   return (

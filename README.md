@@ -57,6 +57,11 @@ To build it yourself instead, see [Building](#building).
 - **Tool shortcuts** — single letters pick editor tools; press `?` anywhere for the full shortcut list
 - **Copy edits to all frames** — apply the current frame's annotations to every frame at once
 
+### Steps
+- **Step-by-step guides** — the Steps tab turns a recording into a numbered guide: one close-up per click, each with a caption you can edit
+- **Two ways to make steps** — from the clicks captured while recording (turn on *Show clicks*), or by placing numbers yourself with the Step number tool
+- **Share it** — export as a single image, a self-contained web page, or Markdown with pictures for an issue or a wiki
+
 ### Playback
 - **Player** with scrubber, loop / boomerang / play-once modes; loop mode, speed, and play state persist across view navigation
 - **Speed control** — 0.25× to 4× playback multiplier

@@ -2,6 +2,13 @@
 
 ## [0.2.0] — 2026-11-24
 
+### Steps
+- New **Steps** tab turns a recording into a numbered, step-by-step guide
+- Steps come from your recorded clicks, or from numbers placed with the Step number tool
+- Each step is a close-up of the frame around the point, with a caption you can edit; steps can be reordered or removed
+- Export the guide as one image, a self-contained web page, or Markdown with pictures, or copy it as an image
+- Quick clicks and touchpad taps that fell between two checks of the mouse are no longer missed
+
 ### Recording
 - While recording, Glattice becomes a small always-on-top strip with a timer, Stop and Discard, and stays out of the recording
 - The countdown is shown on screen where the recording will happen

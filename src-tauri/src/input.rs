@@ -204,9 +204,16 @@ fn poll_loop(
 
         if record_clicks {
             for (vk, button) in buttons {
-                let is_down = down(*vk);
+                // High bit: the button is down right now. Low bit: it was
+                // pressed at some point since the last time anyone asked.
+                // The low bit catches a click that went down and up
+                // between two polls (a touchpad tap, or a click sent by
+                // automation), which the high bit alone would miss.
+                let state = unsafe { GetAsyncKeyState(vk.0 as i32) } as u16;
+                let is_down = state & 0x8000 != 0;
+                let tapped = state & 0x0001 != 0;
                 let was_down = prev_down.get(&vk.0).copied().unwrap_or(false);
-                if is_down && !was_down {
+                if !was_down && (is_down || tapped) {
                     if let Some((cx, cy)) = crate::cursor::position() {
                         // Convert absolute screen pixels into frame-local
                         // coords so the JS renderer can plot directly.
