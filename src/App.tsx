@@ -26,7 +26,7 @@ import {
 
 import { encodeVideo, VideoFormat } from "./lib/encodeVideo";
 import { encodeGif } from "./lib/encodeGif";
-import { remapTrim, TrimRange } from "./lib/trim";
+import { applyTrim, remapTrim, TrimRange } from "./lib/trim";
 import { FrameEdits } from "./lib/edits";
 import {
   addHistoryEntry,
@@ -806,6 +806,26 @@ export default function App() {
     return frameOrder.map((i) => byIdx.get(i)).filter((t): t is FrameThumb => t != null);
   }, [playerFrames, frameOrder]);
 
+  // The Editor works on the clip as trimmed: frames cut off by the trim
+  // are not part of it, so they can't be stepped to or edited there.
+  const editorThumbs = useMemo(
+    () =>
+      applyTrim(
+        orderedPlayerFrames.length > 0 ? orderedPlayerFrames : orderedThumbs,
+        trim,
+      ),
+    [orderedPlayerFrames, orderedThumbs, trim],
+  );
+  // The frame the Editor shows. If the remembered one has since been
+  // trimmed off, fall to the nearest kept end.
+  const editorIndex = useMemo(() => {
+    if (zoomIndex === null || editorThumbs.length === 0) return null;
+    if (editorThumbs.some((t) => t.index === zoomIndex)) return zoomIndex;
+    const at = frameOrder.indexOf(zoomIndex);
+    const beforeStart = trim !== null && at >= 0 && at < trim.inPos;
+    return (beforeStart ? editorThumbs[0] : editorThumbs[editorThumbs.length - 1]).index;
+  }, [zoomIndex, editorThumbs, frameOrder, trim]);
+
   // Spotlight follows the recorded cursor, so it only exists for clips
   // that have one (recorded with Cursor set to Show or Overlay).
   const clipHasCursor = useMemo(
@@ -1258,7 +1278,18 @@ export default function App() {
           trim={trim}
           deletedIndices={deletedIndices}
           onRestore={handleRestore}
-          onZoom={(i) => { setZoomIndex(i); setView("zoom"); }}
+          onZoom={(i) => {
+            if (!editorThumbs.some((t) => t.index === i)) {
+              notify(
+                "This frame is trimmed off, so it can't be edited. Widen or clear the trim in the Player to bring it back.",
+                { label: "Open Player", run: () => setView("player") },
+                "info",
+              );
+              return;
+            }
+            setZoomIndex(i);
+            setView("zoom");
+          }}
           onReorder={changeFrameOrder}
           onDelete={(indices) => {
             const toRemove = new Set(indices);
@@ -1272,10 +1303,10 @@ export default function App() {
         />
       )}
 
-      {view === "zoom" && zoomIndex !== null && (
+      {view === "zoom" && editorIndex !== null && (
         <Zoom
-          thumbs={orderedPlayerFrames.length > 0 ? orderedPlayerFrames : orderedThumbs}
-          index={zoomIndex}
+          thumbs={editorThumbs}
+          index={editorIndex}
           edits={edits}
           inputEvents={inputEvents}
           simplify={prefs.simplify}
