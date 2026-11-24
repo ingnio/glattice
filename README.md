@@ -16,6 +16,10 @@ Built with [Tauri v2](https://tauri.app), React 19, and Rust. Runs on Windows 10
 | --- | --- |
 | ![The Player with scrubber, trim and export controls](docs/screenshots/player.png) | ![The Frames grid showing every frame of a recording](docs/screenshots/frames.png) |
 
+| Record or screenshot | Step-by-step guide |
+| --- | --- |
+| ![Home, with the Record button's menu open to switch between Record and Screenshot](docs/screenshots/home.png) | ![The Steps tab: a titled guide with numbered, captioned close-ups](docs/screenshots/steps.png) |
+
 Everything stays on your computer: Glattice makes no network connections and collects nothing. See [PRIVACY.md](PRIVACY.md).
 
 ---
