@@ -48,6 +48,7 @@ const GROUPS: { title: string; rows: [keys: string[], what: string][] }[] = [
       [["A"], "Arrow"],
       [["P"], "Freehand pen"],
       [["T"], "Text"],
+      [["N"], "Step number"],
       [["B"], "Blur"],
       [["S"], "Simplify"],
       [["Shift"], "Hold while drawing for a square or circle"],

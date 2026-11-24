@@ -607,6 +607,43 @@ mod tests {
     }
 
     #[test]
+    fn a_step_marker_is_a_filled_circle_with_its_number() {
+        // Size 4 gives a radius of 20 px (8 + 4 * 3), centred at (100, 60).
+        let step: Edit = serde_json::from_str(
+            r#"{ "kind": "step", "x": 100, "y": 60, "n": 7,
+                 "color": [239, 68, 68, 255], "thickness": 4 }"#,
+        )
+        .expect("step edit");
+        let recording = Recording {
+            fps: 10,
+            frames: vec![frame(0, None)],
+            input_events: vec![],
+            audio: None,
+            cursor_baked: false,
+        };
+        let mut config: SheetConfig =
+            serde_json::from_str(r#"{ "padding": 0, "columns": 1 }"#).expect("sheet config");
+        config.edits = Some(HashMap::from([(0, vec![step])]));
+        let sheet = compose(&recording, &config).expect("compose sheet");
+        let img = image::load_from_memory(&sheet.bytes)
+            .expect("decode sheet")
+            .to_rgba8();
+        if let Ok(dir) = std::env::var("GLATTICE_SHEET_DIR") {
+            img.save(std::path::Path::new(&dir).join("sheet-step.png"))
+                .expect("write sheet preview");
+        }
+
+        // Inside the circle but clear of the digit: the fill colour.
+        assert_eq!(img.get_pixel(100 - 15, 60).0, [239, 68, 68, 255]);
+        assert_eq!(img.get_pixel(100, 60 + 16).0, [239, 68, 68, 255]);
+        // Outside the circle the frame is untouched.
+        assert_eq!(img.get_pixel(100 + 26, 60).0, GREY);
+        // The number is drawn in white somewhere near the centre.
+        let white = (88..112).any(|x| (48..72).any(|y| img.get_pixel(x, y).0 == [255, 255, 255, 255]));
+        assert!(white, "the step's number should be drawn in white");
+    }
+
+    #[test]
     fn overlays_sit_on_top_of_a_frame_s_edits() {
         // A filled rectangle covering the whole frame would bury anything
         // drawn before it; the cursor and the click must still show.

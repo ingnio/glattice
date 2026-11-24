@@ -29,6 +29,7 @@
 
 ### Editor
 - Box tools (rectangle, ellipse, blur, simplify) move and resize their own boxes without switching to Select
+- New **Step number** tool (`N`): each click drops the next numbered marker (1, 2, 3…) for pointing out steps in order
 - Letter keys pick tools; redo added (`Ctrl+Y`)
 - An options strip names the active tool and says how to use it
 

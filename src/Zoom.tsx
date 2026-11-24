@@ -10,6 +10,8 @@ import {
   EDIT_PALETTE,
   FrameEdits,
   colorToCss,
+  nextStepNumber,
+  stepRadius,
   getFrameEdits,
   setFrameEdits,
 } from "./lib/edits";
@@ -31,6 +33,7 @@ import {
   IconSpotlight,
   IconSimplify,
   IconText,
+  IconStep,
   IconTrash,
   IconUndo,
 } from "./icons";
@@ -537,6 +540,22 @@ export default function Zoom({
         return;
       }
 
+      // Step markers are placed with a single click, not a drag: each
+      // click drops the next number. Nothing is selected afterwards, so
+      // clicking again simply places the one after it.
+      if (tool === "step") {
+        setSelectedIdx(null);
+        commitEdit({
+          kind: "step",
+          x: p.x,
+          y: p.y,
+          n: nextStepNumber(frameEdits),
+          color,
+          thickness,
+        });
+        return;
+      }
+
       canvas.setPointerCapture(evt.pointerId);
       // Starting a new draw always auto-deselects the previous edit so
       // draw → draw gives two independent edits, not an accidental patch.
@@ -594,7 +613,7 @@ export default function Zoom({
       }
       if (next) setDrafting(next);
     },
-    [tool, color, thickness, blurStrength, toSource, selectedIdx, frameEdits],
+    [tool, color, thickness, blurStrength, toSource, selectedIdx, frameEdits, commitEdit],
   );
 
   const onPointerMove = useCallback(
@@ -1055,6 +1074,7 @@ export default function Zoom({
           {toolBtn("freehand", <IconPen size={18} />, "Freehand (P)")}
           {toolBtn("text", <IconText size={18} />, "Text (T)")}
           {toolBtn("blur", <IconBlur size={18} />, "Blur region (B)")}
+          {toolBtn("step", <IconStep size={18} />, "Step number (N)")}
           {toolBtn("simplify", <IconSimplify size={18} />, "Simplify content (S)")}
           <button
             type="button"
@@ -1417,6 +1437,7 @@ const BOX_TOOL_KINDS: EditTool[] = ["rect", "ellipse", "blur", "simplify"];
 // options strip.
 const TOOL_NAMES: Record<EditTool, string> = {
   select: "Select / move",
+  step: "Step number",
   rect: "Rectangle",
   ellipse: "Ellipse",
   arrow: "Arrow",
@@ -1436,10 +1457,12 @@ const TOOL_KEYS: Record<string, EditTool> = {
   t: "text",
   b: "blur",
   s: "simplify",
+  n: "step",
 };
 
 // Name of a selected edit, by kind.
 const KIND_NAMES: Record<Edit["kind"], string> = {
+  step: "Step number",
   rect: "Rectangle",
   ellipse: "Ellipse",
   arrow: "Arrow",
@@ -1453,6 +1476,7 @@ const KIND_NAMES: Record<Edit["kind"], string> = {
 // One-line "how do I use this" for each tool, shown in the options strip.
 const TOOL_HINTS: Record<EditTool, string> = {
   select: "Click an edit to select it. Double-click text to change it.",
+  step: "Click to place 1, then 2, then 3… Use Select to move one, Delete to remove it.",
   rect: "Drag to draw. Then drag the box or a corner to adjust it.",
   ellipse: "Drag to draw. Then drag the shape or a corner to adjust it.",
   arrow: "Drag from the tail to the tip.",
@@ -1561,6 +1585,8 @@ function hitEdit(e: Edit, px: number, py: number, tol: number): boolean {
         py >= e.y - tol &&
         py <= e.y + e.h + tol
       );
+    case "step":
+      return Math.hypot(px - e.x, py - e.y) <= stepRadius(e.thickness) + tol;
   }
 }
 
@@ -1666,6 +1692,7 @@ function translateEdit(e: Edit, dx: number, dy: number): Edit {
         points: e.points.map((p) => [p[0] + dx, p[1] + dy] as [number, number]),
       };
     case "text":
+    case "step":
       return { ...e, x: e.x + dx, y: e.y + dy };
   }
 }
@@ -1729,6 +1756,10 @@ function editBBox(e: Edit): { x: number; y: number; w: number; h: number } {
     }
     case "text":
       return { x: e.x, y: e.y, w: e.w, h: e.h };
+    case "step": {
+      const r = stepRadius(e.thickness);
+      return { x: e.x - r, y: e.y - r, w: r * 2, h: r * 2 };
+    }
   }
 }
 

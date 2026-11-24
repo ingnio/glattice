@@ -56,6 +56,20 @@ export type Edit =
       sizePx: number;
     }
   | {
+      /** A numbered marker: a filled circle with a number in it, for
+       *  pointing out steps in order. */
+      kind: "step";
+      /** Centre of the circle (source pixels). */
+      x: number;
+      y: number;
+      /** The number shown. */
+      n: number;
+      color: EditColor;
+      /** Shared "Size" setting; the circle's radius comes from it via
+       *  `stepRadius`. */
+      thickness: number;
+    }
+  | {
       kind: "blur";
       x: number;
       y: number;
@@ -115,7 +129,8 @@ export type EditTool =
   | "ellipse"
   | "arrow"
   | "freehand"
-  | "text";
+  | "text"
+  | "step";
 
 /** All edits, keyed by frame index. */
 export type FrameEdits = Record<number, Edit[]>;
@@ -130,6 +145,20 @@ export const EDIT_PALETTE: EditColor[] = [
   [255, 255, 255, 255],  // white
   [17, 24, 39, 255],     // near-black
 ];
+
+/** Radius of a step marker for a given Size setting, in source pixels.
+ *  Mirrored by `step_radius` in src-tauri/src/edits.rs. */
+export function stepRadius(thickness: number): number {
+  return 8 + thickness * 3;
+}
+
+/** The number a new step marker gets: one more than the highest on the
+ *  frame, so deleting the last one and adding again reuses its number. */
+export function nextStepNumber(frameEdits: Edit[]): number {
+  let max = 0;
+  for (const e of frameEdits) if (e.kind === "step" && e.n > max) max = e.n;
+  return max + 1;
+}
 
 export function colorToCss(c: EditColor): string {
   return `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${c[3] / 255})`;

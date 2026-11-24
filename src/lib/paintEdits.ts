@@ -2,7 +2,7 @@
 // Keeps preview output identical between the Zoom view (where edits are
 // authored) and the Player view (where they're played back).
 
-import { Edit, colorToCss } from "./edits";
+import { Edit, colorToCss, stepRadius } from "./edits";
 import type { InputEvent } from "./tauri";
 
 // How long an event remains visible after it fires.
@@ -434,6 +434,32 @@ export function paintEdit(
       for (let i = 0; i < lines.length; i++) {
         ctx.fillText(lines[i], e.x, e.y + i * lineH);
       }
+      ctx.restore();
+      break;
+    }
+    case "step": {
+      const r = stepRadius(e.thickness);
+      // Dark text on light fills (yellow, white), white on the rest.
+      const luma = 0.299 * e.color[0] + 0.587 * e.color[1] + 0.114 * e.color[2];
+      const ink = luma > 165 ? "rgba(17, 24, 39, 1)" : "rgba(255, 255, 255, 1)";
+      ctx.save();
+      ctx.fillStyle = stroke;
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, r, 0, Math.PI * 2);
+      ctx.fill();
+      // A thin rim in the ink colour keeps the marker readable on a
+      // background close to its own colour.
+      ctx.strokeStyle = ink;
+      ctx.lineWidth = Math.max(1.5, r * 0.09);
+      ctx.stroke();
+      const label = String(e.n);
+      // Shrink the digits a little as the number gets longer.
+      const fontPx = r * (label.length > 2 ? 0.82 : label.length > 1 ? 1.0 : 1.2);
+      ctx.fillStyle = ink;
+      ctx.font = `700 ${fontPx}px "Roboto Mono", ui-monospace, Menlo, monospace`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(label, e.x, e.y + fontPx * 0.06);
       ctx.restore();
       break;
     }

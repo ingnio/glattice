@@ -86,6 +86,16 @@ pub enum Edit {
         #[allow(dead_code)]
         natural_h: u32,
     },
+    /// A numbered marker: a filled circle with a number in it.
+    #[serde(rename_all = "camelCase")]
+    Step {
+        /// Centre of the circle.
+        x: f32,
+        y: f32,
+        n: u32,
+        color: [u8; 4],
+        thickness: f32,
+    },
     #[serde(rename_all = "camelCase")]
     Simplify {
         x: f32,
@@ -111,8 +121,54 @@ pub fn apply_edits(img: &mut RgbaImage, edits: &[Edit]) {
     }
 }
 
+/// Radius of a step marker for a given Size setting. Mirrors
+/// `stepRadius` in src/lib/edits.ts.
+fn step_radius(thickness: f32) -> f32 {
+    8.0 + thickness * 3.0
+}
+
+/// Draw a step marker the way `paintEdit` does in the frontend: a filled
+/// circle, a thin rim, and the number centred in it.
+fn draw_step(img: &mut RgbaImage, x: f32, y: f32, n: u32, color: [u8; 4], thickness: f32) {
+    let r = step_radius(thickness);
+    let luma = 0.299 * color[0] as f32 + 0.587 * color[1] as f32 + 0.114 * color[2] as f32;
+    let ink: [u8; 4] = if luma > 165.0 {
+        [17, 24, 39, 255]
+    } else {
+        [255, 255, 255, 255]
+    };
+    fill_disk(img, x, y, r, color);
+    let rim = (r * 0.09).max(1.5);
+    stroke_ellipse(img, x - r, y - r, r * 2.0, r * 2.0, rim, ink);
+
+    let label = n.to_string();
+    let em = r * match label.len() {
+        1 => 1.2,
+        2 => 1.0,
+        _ => 0.82,
+    };
+    // The embedded font is sized by line height, the canvas by em.
+    let font_px = (em * 1.3).round().max(6.0) as u32;
+    let (tw, th) = font::text_dimensions(&label, font_px);
+    font::draw_text(
+        img,
+        (x - tw as f32 / 2.0).round() as i32,
+        (y - th as f32 / 2.0).round() as i32,
+        &label,
+        image::Rgba(ink),
+        font_px,
+    );
+}
+
 fn apply_edit(img: &mut RgbaImage, edit: &Edit) {
     match edit {
+        Edit::Step {
+            x,
+            y,
+            n,
+            color,
+            thickness,
+        } => draw_step(img, *x, *y, *n, *color, *thickness),
         Edit::Rect {
             x,
             y,

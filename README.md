@@ -45,6 +45,7 @@ To build it yourself instead, see [Building](#building).
 
 ### Editing
 - **Per-frame annotation tools** — arrows, rectangles, ellipses, freehand lines, and text labels
+- **Step numbers** — click to drop numbered markers (1, 2, 3…) that point out steps in order
 - **Image overlay** — insert a PNG/JPG/WebP image onto any frame; drag to move, drag corners to resize; baked into all exports including sprite sheets
 - **Blur** — drag a region to apply Gaussian blur (radius 2–40 px) for privacy
 - **Simplify** — AI-style text redaction: detects text blocks and replaces them with solid rounded shapes; tunable block size, threshold, merge, and roundness

@@ -356,6 +356,16 @@ export const IconPen = ({ size = defaults.size }: IconProps) =>
     </>,
   );
 
+/** A numbered marker: a circle with a 1 in it. */
+export const IconStep = ({ size = defaults.size }: IconProps) =>
+  svg(
+    size,
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <polyline points="10.5 9.5 12.5 8 12.5 16" />
+    </>,
+  );
+
 export const IconText = ({ size = defaults.size }: IconProps) =>
   svg(
     size,
