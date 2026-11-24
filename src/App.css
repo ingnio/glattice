@@ -2114,6 +2114,12 @@ body {
   background: var(--bg-elev);
 }
 
+/* Frames: every button in the top-right group is a circle, so Add and
+ * Preview match the ⋮ menu beside them. */
+.grid-view__tools .icon-btn {
+  border-radius: 999px;
+}
+
 .player__chrome-right .icon-btn:hover:not(:disabled),
 .grid-view__tools .icon-btn:hover:not(:disabled),
 .zoom__tools .icon-btn:hover:not(:disabled) {
