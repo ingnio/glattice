@@ -89,9 +89,25 @@ export default function Zoom({
   const current = pos >= 0 ? thumbs[pos] : null;
 
   const [tool, setTool] = useState<EditTool>("select");
-  const [color, setColor] = useState<EditColor>(EDIT_PALETTE[0]);
-  const [thickness, setThickness] = useState<number>(6);
-  const [blurStrength, setBlurStrength] = useState<number>(12);
+  // Colour, size and blur strength start from whatever was used last
+  // (see `lastStyle`) and every change is remembered there, so the next
+  // edit, the next frame and the next visit to the Editor all carry on
+  // in the same style.
+  const [color, setColorState] = useState<EditColor>(lastStyle.color);
+  const [thickness, setThicknessState] = useState<number>(lastStyle.thickness);
+  const [blurStrength, setBlurStrengthState] = useState<number>(lastStyle.blurStrength);
+  const setColor = useCallback((c: EditColor) => {
+    lastStyle.color = c;
+    setColorState(c);
+  }, []);
+  const setThickness = useCallback((t: number) => {
+    lastStyle.thickness = t;
+    setThicknessState(t);
+  }, []);
+  const setBlurStrength = useCallback((r: number) => {
+    lastStyle.blurStrength = r;
+    setBlurStrengthState(r);
+  }, []);
   // Simplify defaults come from persisted prefs so the user's last
   // tuned values are remembered across sessions.
   const simplifyBlock = simplify.blockSize;
@@ -1005,11 +1021,12 @@ export default function Zoom({
   };
 
   const onColorPick = (c: EditColor) => {
+    // Restyling a selected edit also becomes the style for what you draw
+    // next, so a look you set once carries forward.
     if (selectedEdit && "color" in selectedEdit) {
       updateSelectedEdit({ color: c } as Partial<Edit>);
-    } else {
-      setColor(c);
     }
+    setColor(c);
   };
 
   const onThicknessChange = (t: number) => {
@@ -1019,17 +1036,15 @@ export default function Zoom({
       } else if ("thickness" in selectedEdit) {
         updateSelectedEdit({ thickness: t } as Partial<Edit>);
       }
-    } else {
-      setThickness(t);
     }
+    setThickness(t);
   };
 
   const onStrengthChange = (r: number) => {
     if (selectedEdit && selectedEdit.kind === "blur") {
       updateSelectedEdit({ radius: r } as Partial<Edit>);
-    } else {
-      setBlurStrength(r);
     }
+    setBlurStrength(r);
   };
 
   const onCompactSliderChange = (
@@ -1449,6 +1464,14 @@ function cloneEditShallow(e: Edit): Edit {
 // grab zone stays usable regardless of how much the source image is
 // scaled to fit the viewport.
 const HANDLE_DISPLAY_SIZE = 12;
+
+// The drawing style in use, kept outside the component so it survives
+// moving between frames and leaving and re-entering the Editor.
+const lastStyle: { color: EditColor; thickness: number; blurStrength: number } = {
+  color: EDIT_PALETTE[0],
+  thickness: 6,
+  blurStrength: 12,
+};
 
 // Tools whose drawn box can be resized/moved while that tool stays active.
 const BOX_TOOL_KINDS: EditTool[] = ["rect", "ellipse", "blur", "simplify"];
