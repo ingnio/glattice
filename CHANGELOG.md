@@ -2,6 +2,11 @@
 
 ## [0.2.0] — 2026-11-24
 
+### Screenshots
+- The Record button has a chevron that switches it between **Record** and **Screenshot**; the choice lasts until changed or the app restarts
+- A screenshot is one picture of the screen or the selected region, opened straight in the editor to mark up, copy or export
+- `Ctrl+Shift+R` does whichever the button is set to
+
 ### Steps
 - New **Steps** tab turns a recording into a numbered, step-by-step guide
 - Steps come from your recorded clicks, or from numbers placed with the Step number tool

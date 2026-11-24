@@ -4033,51 +4033,126 @@ body {
   font-size: 13px;
 }
 
-/* Home: the Screenshot option, a single quiet line under the cards. */
-.home2__snap {
+.home2__region-actions {
+  flex-wrap: wrap;
+}
+
+/* ——— split capture button: [ do the current mode | ▾ pick the mode ] —— */
+.action-split {
+  position: relative;
+  display: flex;
+}
+
+.action-split > .action-card {
+  flex: 1;
+  min-width: 0;
+  /* Room on the right for the chevron, matched on the left so the
+   * icon and label stay centred. */
+  padding-left: 30px;
+  padding-right: 30px;
+}
+
+.action-split__chevron {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  width: 100%;
-  padding: 7px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  padding: 0;
+  border: none;
+  border-left: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 0 14px 14px 0;
   background: transparent;
-  color: var(--text);
-  font: inherit;
-  font-size: 13px;
+  color: #fff;
   cursor: pointer;
-  transition: border-color 120ms, background 120ms;
+  transition: background 120ms;
 }
 
-.home2__snap:hover:not(:disabled) {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
+.action-split__chevron:hover:not(:disabled),
+.action-split__chevron[aria-expanded="true"] {
+  background: rgba(255, 255, 255, 0.16);
 }
 
-.home2__snap:disabled {
+.action-split__chevron:disabled {
   opacity: 0.5;
   cursor: default;
 }
 
-.home2__snap-label {
+.action-split__chevron:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: -3px;
+}
+
+.action-split__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+}
+
+.action-split__menu {
+  /* In the page, above the click-away scrim. */
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.22);
+  z-index: 21;
+}
+
+.action-split__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.action-split__item:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.action-split__item.is-current {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.action-split__item-icon {
+  display: inline-flex;
+  color: var(--accent);
+}
+
+.action-split__item-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.action-split__item-label {
+  font-size: 13px;
   font-weight: 600;
 }
 
-.home2__snap-hint {
-  font-size: 12px;
+.action-split__item-hint {
+  font-size: 11px;
 }
 
-.home2--compact .home2__snap {
-  padding: 4px 8px;
-  font-size: 12px;
+.home2--compact .action-split > .action-card {
+  padding-left: 24px;
+  padding-right: 24px;
 }
 
-.home2--compact .home2__snap-hint {
-  display: none;
-}
-
-.home2__region-actions {
-  flex-wrap: wrap;
+.home2--compact .action-split__chevron {
+  width: 22px;
 }

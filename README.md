@@ -39,6 +39,7 @@ To build it yourself instead, see [Building](#building).
 - **Key press display** — recent keystrokes shown as on-screen chips (e.g. `Ctrl+S`)
 - **Cursor overlay** — cursor re-drawn on top of all edits so it stays sharp; can be off, baked, or overlay
 - **Audio recording** — optional microphone capture, muxed into MP4 / WebM exports
+- **Screenshots** — switch the Record button to Screenshot from its chevron to grab one picture and open it straight in the editor
 - **Countdown timer** — 0–10 s delay before capture starts, shown on screen where the recording will happen
 - **Recording strip** — while recording, Glattice shrinks to a small always-on-top strip with the timer, Stop and Discard; it never appears in the recording
 - **Global hotkey** — `Ctrl+Shift+R` starts and stops a recording from anywhere

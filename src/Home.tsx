@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
@@ -16,6 +16,8 @@ import logoUrl from "./assets/glattice-logo.png";
 import { convertFileSrc, RegionInput } from "./lib/tauri";
 import { HistoryEntry } from "./lib/prefs";
 
+export type CaptureMode = "record" | "screenshot";
+
 interface Props {
   region: RegionInput | null;
   supported: boolean | null;
@@ -27,6 +29,10 @@ interface Props {
   onRecord: () => void;
   /** Capture one still and open it in the Editor. */
   onScreenshot: () => void;
+  /** What the main capture button does. Chosen from the chevron on
+   *  that button; lasts until changed or the app is restarted. */
+  captureMode: CaptureMode;
+  onCaptureModeChange: (mode: CaptureMode) => void;
   onSelectRegion: () => void;
   onClearRegion: () => void;
   onConfig: () => void;
@@ -48,6 +54,8 @@ export default function Home({
   onRemoveHistory,
   onRecord,
   onScreenshot,
+  captureMode,
+  onCaptureModeChange,
   onSelectRegion,
   onClearRegion,
   onConfig,
@@ -59,6 +67,19 @@ export default function Home({
   const [dragActive, setDragActive] = useState(false);
   // Compact mode keeps Recent collapsed until asked for.
   const [recentOpen, setRecentOpen] = useState(false);
+  // The Record / Screenshot list opened from the capture button's chevron.
+  const [modeMenuOpen, setModeMenuOpen] = useState(false);
+  const closeModeMenu = useCallback(() => setModeMenuOpen(false), []);
+  const modeMenu = modeMenuOpen ? (
+    <CaptureModeMenu
+      mode={captureMode}
+      onPick={(m) => {
+        onCaptureModeChange(m);
+        setModeMenuOpen(false);
+      }}
+      onClose={closeModeMenu}
+    />
+  ) : null;
   const rootRef = useRef<HTMLDivElement>(null);
   const lastHeightRef = useRef("");
 
@@ -173,32 +194,17 @@ export default function Home({
                 {region.width} × {region.height} px
               </span>
             </div>
-            <button
-              type="button"
-              className="action-card action-card--primary action-card--ready home2__region-record"
-              onClick={onRecord}
+            <CaptureButton
+              mode={captureMode}
+              onRecord={onRecord}
+              onScreenshot={onScreenshot}
               disabled={supported === false}
-              title="Record this region (Ctrl+Shift+R)"
-            >
-              <div className="action-card__icon">
-                <IconRecord size={26} />
-              </div>
-              <div className="home2__region-record-text">
-                <div className="action-card__title">Record region</div>
-                <div className="action-card__subtitle">Ctrl+Shift+R</div>
-              </div>
-            </button>
+              region
+              menuOpen={modeMenuOpen}
+              onMenuToggle={() => setModeMenuOpen((o) => !o)}
+            />
+            {modeMenu}
             <div className="home2__region-actions">
-              <button
-                type="button"
-                className="btn btn--sm"
-                onClick={onScreenshot}
-                disabled={supported === false}
-                title="Take one picture of this region and open it to mark up"
-              >
-                <IconCamera size={14} />
-                Screenshot
-              </button>
               <button
                 type="button"
                 className="btn btn--sm"
@@ -220,19 +226,14 @@ export default function Home({
         ) : (
           <>
             <div className="action-grid">
-              <button
-                type="button"
-                className="action-card action-card--primary"
-                onClick={onRecord}
+              <CaptureButton
+                mode={captureMode}
+                onRecord={onRecord}
+                onScreenshot={onScreenshot}
                 disabled={supported === false}
-                title="Record the full screen (Ctrl+Shift+R)"
-              >
-                <div className="action-card__icon">
-                  <IconRecord size={30} />
-                </div>
-                <div className="action-card__title">Record</div>
-                <div className="action-card__subtitle">Capture a new GIF</div>
-              </button>
+                menuOpen={modeMenuOpen}
+                onMenuToggle={() => setModeMenuOpen((o) => !o)}
+              />
               <button
                 type="button"
                 className="action-card"
@@ -248,24 +249,13 @@ export default function Home({
                 </div>
               </button>
             </div>
-
-            {/* A quiet third option rather than a third card: one line,
-                in both layouts. */}
-            <button
-              type="button"
-              className="home2__snap"
-              onClick={onScreenshot}
-              disabled={supported === false}
-              title="Take one picture of the screen and open it in the Editor to mark up"
-            >
-              <IconCamera size={15} />
-              <span className="home2__snap-label">Screenshot</span>
-              <span className="home2__snap-hint muted">one picture, opened to mark up</span>
-            </button>
+            {modeMenu}
 
             <p className="home2__tip muted">
-              <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> starts and stops
-              recording from anywhere
+              <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd>{" "}
+              {captureMode === "screenshot"
+                ? "takes a screenshot from anywhere"
+                : "starts and stops recording from anywhere"}
             </p>
 
             <div className="home2__or">
@@ -335,6 +325,142 @@ export default function Home({
         </div>
       )}
     </div>
+  );
+}
+
+const MODES: { mode: CaptureMode; label: string; hint: string }[] = [
+  { mode: "record", label: "Record", hint: "Capture a GIF or video" },
+  { mode: "screenshot", label: "Screenshot", hint: "One picture to mark up" },
+];
+
+/** The main capture button, split in two: the large part does the
+ *  current mode, and the chevron on its right edge switches the mode
+ *  between recording and taking a screenshot. Used for the full-screen
+ *  card and, with `region`, for the selected-region button. */
+function CaptureButton({
+  mode,
+  onRecord,
+  onScreenshot,
+  disabled,
+  region = false,
+  menuOpen,
+  onMenuToggle,
+}: {
+  mode: CaptureMode;
+  onRecord: () => void;
+  onScreenshot: () => void;
+  disabled: boolean;
+  region?: boolean;
+  menuOpen: boolean;
+  onMenuToggle: () => void;
+}) {
+  const shot = mode === "screenshot";
+
+  const title = shot
+    ? region
+      ? "Screenshot region"
+      : "Screenshot"
+    : region
+      ? "Record region"
+      : "Record";
+  const subtitle = region
+    ? "Ctrl+Shift+R"
+    : shot
+      ? "One picture to mark up"
+      : "Capture a new GIF";
+  const tooltip = shot
+    ? `Take one picture of ${region ? "this region" : "the screen"} and open it to mark up (Ctrl+Shift+R)`
+    : `Record ${region ? "this region" : "the full screen"} (Ctrl+Shift+R)`;
+  const Icon = shot ? IconCamera : IconRecord;
+
+  return (
+    <div className={`action-split ${region ? "action-split--region" : ""}`}>
+      <button
+        type="button"
+        className={`action-card action-card--primary ${region ? "action-card--ready home2__region-record" : ""}`}
+        onClick={shot ? onScreenshot : onRecord}
+        disabled={disabled}
+        title={tooltip}
+      >
+        <div className="action-card__icon">
+          <Icon size={region ? 26 : 30} />
+        </div>
+        {region ? (
+          <div className="home2__region-record-text">
+            <div className="action-card__title">{title}</div>
+            <div className="action-card__subtitle">{subtitle}</div>
+          </div>
+        ) : (
+          <>
+            <div className="action-card__title">{title}</div>
+            <div className="action-card__subtitle">{subtitle}</div>
+          </>
+        )}
+      </button>
+      <button
+        type="button"
+        className="action-split__chevron"
+        onClick={onMenuToggle}
+        disabled={disabled}
+        aria-haspopup="true"
+        aria-expanded={menuOpen}
+        aria-label="Choose what this button does"
+        title="Record or screenshot: choose what this button does"
+      >
+        <IconChevron size={16} />
+      </button>
+    </div>
+  );
+}
+
+/** The list the chevron opens. It sits in the page under the button
+ *  rather than floating over it: Home's window is sized to its content,
+ *  so a floating menu would be cut off at the window's edge. In the page,
+ *  the window simply grows to fit while it is open. */
+function CaptureModeMenu({
+  mode,
+  onPick,
+  onClose,
+}: {
+  mode: CaptureMode;
+  onPick: (mode: CaptureMode) => void;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      // Close only the menu; don't let Esc also clear the region.
+      e.stopImmediatePropagation();
+      onClose();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [onClose]);
+
+  return (
+    <>
+      <div className="action-split__scrim" onClick={onClose} />
+      <div className="action-split__menu" role="menu">
+        {MODES.map((m) => (
+          <button
+            key={m.mode}
+            type="button"
+            role="menuitemradio"
+            aria-checked={mode === m.mode}
+            className={`action-split__item ${mode === m.mode ? "is-current" : ""}`}
+            onClick={() => onPick(m.mode)}
+          >
+            <span className="action-split__item-icon">
+              {m.mode === "screenshot" ? <IconCamera size={16} /> : <IconRecord size={16} />}
+            </span>
+            <span className="action-split__item-text">
+              <span className="action-split__item-label">{m.label}</span>
+              <span className="action-split__item-hint muted">{m.hint}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+    </>
   );
 }
 

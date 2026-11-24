@@ -9,7 +9,7 @@ import {
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { copyFile, writeFile } from "@tauri-apps/plugin-fs";
 import RegionOverlay from "./RegionOverlay";
-import Home from "./Home";
+import Home, { CaptureMode } from "./Home";
 import Config from "./Config";
 import Player from "./Player";
 import Grid from "./Grid";
@@ -115,6 +115,11 @@ async function keepWindowOnScreen(): Promise<void> {
 
 export default function App() {
   const [view, setView] = useState<View>("home");
+  // What Home's capture button and the hotkey do. Not saved: it goes
+  // back to recording when the app is restarted.
+  const [captureMode, setCaptureMode] = useState<CaptureMode>("record");
+  const captureModeRef = useRef<CaptureMode>("record");
+  captureModeRef.current = captureMode;
   // The step-by-step guide for the loaded clip, once its Steps tab has
   // been opened. Kept here so captions survive moving between tabs.
   const [guide, setGuide] = useState<Guide | null>(null);
@@ -850,6 +855,8 @@ export default function App() {
     const unlistenPromise = listen("toggle-recording", () => {
       if (countdownRef.current !== null) cancelCountdown();
       else if (isRecordingRef.current) handleStop();
+      // The hotkey does whatever Home's capture button is set to.
+      else if (captureModeRef.current === "screenshot") handleScreenshot();
       else handleRecord();
     });
     return () => {
@@ -1363,6 +1370,8 @@ export default function App() {
           }
           onRecord={handleRecord}
           onScreenshot={handleScreenshot}
+          captureMode={captureMode}
+          onCaptureModeChange={setCaptureMode}
           onSelectRegion={handleSelectRegion}
           onClearRegion={handleClearRegion}
           onConfig={() => setView("config")}
