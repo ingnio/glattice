@@ -44,7 +44,7 @@ def rust_rows():
         (packages[i]["name"], packages[i]["version"], packages[i].get("license") or "see repository", packages[i].get("repository") or "")
         for i in seen
     ]
-    return sorted(rows, key=lambda r: r[0].lower())
+    return sorted(rows, key=lambda r: (r[0].lower(), r[1]))
 
 
 def npm_rows():
@@ -54,7 +54,7 @@ def npm_rows():
         for lic, pkgs in raw.items()
         for p in pkgs
     ]
-    return sorted(rows, key=lambda r: r[0].lower())
+    return sorted(rows, key=lambda r: (r[0].lower(), r[1]))
 
 
 def main():

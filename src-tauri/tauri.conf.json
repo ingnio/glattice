@@ -67,8 +67,8 @@
     "active": true,
     "targets": "all",
     "publisher": "Glattice",
-    "shortDescription": "Screen recorder and annotation tool",
-    "longDescription": "Record your screen, annotate individual frames, then export as an animated GIF, MP4, WebM, or a sprite sheet.",
+    "shortDescription": "Screen recorder, screenshot and annotation tool",
+    "longDescription": "Record your screen or take a screenshot, mark it up, then share it as an animated GIF, MP4, WebM, a sprite sheet, an annotated image, or a step-by-step guide.",
     "category": "GraphicsAndDesign",
     "licenseFile": "../LICENSE",
     "resources": {

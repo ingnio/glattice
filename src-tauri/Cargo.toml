@@ -1,7 +1,7 @@
 [package]
 name = "glattice"
 version = "0.2.0"
-description = "Screen capture to annotated sprite sheets"
+description = "Screen recorder, screenshot and annotation tool"
 authors = ["Glattice Contributors"]
 license = "MIT"
 repository = "https://github.com/ingnio/glattice"
