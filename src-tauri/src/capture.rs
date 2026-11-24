@@ -43,6 +43,10 @@ pub struct Recording {
     /// recording enabled. Persisted to disk as a WAV alongside the
     /// recording so the frontend can mux it into MP4 / WebM exports.
     pub audio: Option<AudioCapture>,
+    /// True when the cursor was drawn into the frame pixels ("baked"
+    /// mode). Frames then already look the way the Player shows them, so
+    /// the frontend doesn't have to re-render just to add the cursor.
+    pub cursor_baked: bool,
 }
 
 /// Region in physical monitor-local pixel coordinates, relative to the
@@ -74,6 +78,7 @@ struct Session {
     fps: u32,
     input: Option<InputRecorder>,
     audio: Option<AudioRecorder>,
+    cursor_baked: bool,
 }
 
 #[derive(Default)]
@@ -228,6 +233,7 @@ impl CaptureState {
             fps,
             input,
             audio,
+            cursor_baked: cursor_mode == CursorMode::Baked,
         });
         Ok(())
     }
@@ -273,6 +279,7 @@ impl CaptureState {
             frames,
             input_events,
             audio,
+            cursor_baked: session.cursor_baked,
         })
     }
 

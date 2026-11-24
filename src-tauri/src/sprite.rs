@@ -14,7 +14,7 @@ use crate::{
     cursor,
     edits::Edit,
     error::{AppError, AppResult},
-    font,
+    font, overlays,
 };
 
 #[derive(Debug, Deserialize, Clone)]
@@ -195,6 +195,7 @@ pub fn compose(recording: &Recording, config: &SheetConfig) -> AppResult<SheetOu
     // strokes stay crisp at the final sheet resolution. Coordinates
     // are in source-pixel space (same as the full-res frame).
     let edits_map = config.edits.as_ref();
+    let input_events = &recording.input_events;
     let resized: Vec<AppResult<RgbaImage>> = selected
         .par_iter()
         .zip(original_indices.par_iter())
@@ -204,24 +205,25 @@ pub fn compose(recording: &Recording, config: &SheetConfig) -> AppResult<SheetOu
                     .ok_or_else(|| {
                         AppError::InvalidConfig("frame pixel buffer size mismatch".into())
                     })?;
-            if let Some(map) = edits_map {
-                if let Some(list) = map.get(&orig_idx) {
-                    if !list.is_empty() {
-                        crate::edits::apply_edits(&mut img, list);
-                        // Re-overlay the cursor on top of any edits so
-                        // simplify pills (or any other edit covering the
-                        // cursor's pixels) can't bury it.
-                        if let Some((cx, cy)) = frame.cursor {
-                            cursor::draw(
-                                img.as_mut(),
-                                frame.width,
-                                frame.height,
-                                cx,
-                                cy,
-                            );
-                        }
-                    }
+            if let Some(list) = edits_map.and_then(|map| map.get(&orig_idx)) {
+                if !list.is_empty() {
+                    crate::edits::apply_edits(&mut img, list);
                 }
+            }
+            // The cursor, click rings and key labels go on after the
+            // edits, in the same order the Player and the Frames grid
+            // draw them, so a sheet shows what those views show and no
+            // edit (a simplify pill, a blur) can bury them. This runs
+            // for every frame, edited or not: an "overlay" cursor only
+            // exists as a position until something draws it. For
+            // recordings with the cursor baked in, it repaints the same
+            // pixels.
+            if let Some((cx, cy)) = frame.cursor {
+                cursor::draw(img.as_mut(), frame.width, frame.height, cx, cy);
+            }
+            if !input_events.is_empty() {
+                overlays::draw_clicks(&mut img, input_events, frame.elapsed_ms);
+                overlays::draw_keys(&mut img, input_events, frame.elapsed_ms);
             }
             // Spotlight is applied after all edits + cursor overlay so the
             // dim vignette sits on top of everything, just like the canvas
@@ -487,4 +489,161 @@ fn flatten_alpha_to_rgb(img: &RgbaImage, bg: [u8; 3]) -> Vec<u8> {
         out.push(mix(b, bg[2]));
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::capture::CapturedFrame;
+    use crate::input::{InputEvent, KeyModifiers, MouseButton};
+
+    const GREY: [u8; 4] = [120, 120, 120, 255];
+    const CELL_W: u32 = 200;
+    const CELL_H: u32 = 120;
+
+    fn frame(elapsed_ms: u32, cursor: Option<(i32, i32)>) -> CapturedFrame {
+        CapturedFrame {
+            width: CELL_W,
+            height: CELL_H,
+            rgba: GREY.repeat((CELL_W * CELL_H) as usize),
+            elapsed_ms,
+            cursor,
+        }
+    }
+
+    /// Compose the frames side by side with no padding and decode the
+    /// sheet, so cell N covers x = N * 200 .. N * 200 + 200.
+    ///
+    /// Set GLATTICE_SHEET_DIR to a folder to also save each sheet there
+    /// as `<name>.png`.
+    fn compose_one_row(
+        name: &str,
+        frames: Vec<CapturedFrame>,
+        input_events: Vec<InputEvent>,
+    ) -> RgbaImage {
+        let columns = frames.len();
+        let recording = Recording {
+            fps: 10,
+            frames,
+            input_events,
+            audio: None,
+            cursor_baked: false,
+        };
+        let config: SheetConfig =
+            serde_json::from_str(&format!(r#"{{ "padding": 0, "columns": {columns} }}"#))
+                .expect("sheet config");
+        let sheet = compose(&recording, &config).expect("compose sheet");
+        let img = image::load_from_memory(&sheet.bytes)
+            .expect("decode sheet")
+            .to_rgba8();
+        if let Ok(dir) = std::env::var("GLATTICE_SHEET_DIR") {
+            img.save(std::path::Path::new(&dir).join(format!("{name}.png")))
+                .expect("write sheet preview");
+        }
+        img
+    }
+
+    #[test]
+    fn the_overlay_cursor_is_drawn_on_frames_that_have_no_edits() {
+        let sheet = compose_one_row(
+            "sheet-cursor",
+            vec![frame(0, Some((30, 40))), frame(100, None)],
+            vec![],
+        );
+
+        // The arrow's hotspot is its white outline; its body is black.
+        assert_eq!(sheet.get_pixel(30, 40).0, [255, 255, 255, 255]);
+        assert_eq!(sheet.get_pixel(31, 42).0, [0, 0, 0, 255]);
+        // A frame with no cursor position is left alone.
+        assert_eq!(sheet.get_pixel(CELL_W + 30, 40).0, GREY);
+        assert_eq!(sheet.get_pixel(CELL_W + 31, 42).0, GREY);
+    }
+
+    #[test]
+    fn a_click_ring_shows_on_the_frames_just_after_the_click() {
+        let click = InputEvent::Click {
+            timestamp_ms: 50,
+            x: 100,
+            y: 60,
+            button: MouseButton::Left,
+        };
+        let sheet = compose_one_row(
+            "sheet-click",
+            vec![frame(0, None), frame(100, None)],
+            vec![click],
+        );
+
+        // The frame captured before the click has nothing on it.
+        assert_eq!(sheet.get_pixel(100, 60).0, GREY);
+        // The one 50 ms after it has the amber dot at the click point.
+        let dot = sheet.get_pixel(CELL_W + 100, 60).0;
+        assert!(
+            dot[0] > 220 && dot[1] > 170 && dot[2] < 80,
+            "amber dot, got {dot:?}"
+        );
+    }
+
+    #[test]
+    fn a_key_label_shows_on_the_frames_just_after_the_press() {
+        let key = InputEvent::Key {
+            timestamp_ms: 400,
+            label: "S".into(),
+            modifiers: KeyModifiers {
+                ctrl: true,
+                ..Default::default()
+            },
+        };
+        let sheet = compose_one_row(
+            "sheet-key",
+            vec![frame(0, None), frame(500, None)],
+            vec![key],
+        );
+
+        // The label is a dark pill in the bottom-left corner of the cell:
+        // 5 px in from the left, its bottom edge 5 px up from the bottom.
+        assert_eq!(sheet.get_pixel(8, 102).0, GREY, "pressed after this frame");
+        let pill = sheet.get_pixel(CELL_W + 8, 102).0;
+        assert!(pill[0] < 90, "dark pill on the next frame, got {pill:?}");
+    }
+
+    #[test]
+    fn overlays_sit_on_top_of_a_frame_s_edits() {
+        // A filled rectangle covering the whole frame would bury anything
+        // drawn before it; the cursor and the click must still show.
+        let cover: Edit = serde_json::from_str(
+            r#"{ "kind": "rect", "x": 0, "y": 0, "w": 200, "h": 120,
+                 "color": [37, 99, 235, 255], "thickness": 2, "fill": true }"#,
+        )
+        .expect("rect edit");
+        let recording = Recording {
+            fps: 10,
+            frames: vec![frame(100, Some((30, 40)))],
+            input_events: vec![InputEvent::Click {
+                timestamp_ms: 50,
+                x: 100,
+                y: 60,
+                button: MouseButton::Left,
+            }],
+            audio: None,
+            cursor_baked: false,
+        };
+        let mut config: SheetConfig =
+            serde_json::from_str(r#"{ "padding": 0, "columns": 1 }"#).expect("sheet config");
+        config.edits = Some(HashMap::from([(0, vec![cover])]));
+
+        let sheet = compose(&recording, &config).expect("compose sheet");
+        let img = image::load_from_memory(&sheet.bytes)
+            .expect("decode sheet")
+            .to_rgba8();
+
+        // The edit really did repaint the frame...
+        assert_ne!(img.get_pixel(180, 20).0, GREY);
+        // ...and the cursor and the click dot are on top of it.
+        assert_eq!(img.get_pixel(30, 40).0, [255, 255, 255, 255]);
+        let dot = img.get_pixel(100, 60).0;
+        assert!(
+            dot[0] > 220 && dot[1] > 170 && dot[2] < 80,
+            "amber dot, got {dot:?}"
+        );
+    }
 }

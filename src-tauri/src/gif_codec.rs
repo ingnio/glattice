@@ -306,6 +306,7 @@ pub fn recording_from_decoded_gif(decoded: DecodedGif) -> Recording {
         frames,
         input_events: Vec::new(),
         audio: None,
+        cursor_baked: false,
     }
 }
 

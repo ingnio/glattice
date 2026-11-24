@@ -75,6 +75,12 @@ pub fn wrap_text(text: &str, max_width: f32, px_size: u32) -> Vec<String> {
     out
 }
 
+/// Whether the embedded font can draw `c` (rather than its "missing
+/// glyph" box).
+pub fn has_glyph(c: char) -> bool {
+    font().glyph_id(c).0 != 0
+}
+
 /// Width/height occupied by `text` at the given pixel size. Returned
 /// values are integers (ceiling-rounded) so callers positioning text
 /// inside a cell don't need to worry about subpixels.

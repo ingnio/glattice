@@ -337,7 +337,7 @@ fn stroke_line(
     }
 }
 
-fn fill_disk(img: &mut RgbaImage, cx: f32, cy: f32, r: f32, color: [u8; 4]) {
+pub(crate) fn fill_disk(img: &mut RgbaImage, cx: f32, cy: f32, r: f32, color: [u8; 4]) {
     let (iw, ih) = img.dimensions();
     let x0 = ((cx - r - 1.0).max(0.0)) as i32;
     let y0 = ((cy - r - 1.0).max(0.0)) as i32;
@@ -386,7 +386,7 @@ fn fill_ellipse(img: &mut RgbaImage, x: f32, y: f32, w: f32, h: f32, color: [u8;
     }
 }
 
-fn stroke_ellipse(
+pub(crate) fn stroke_ellipse(
     img: &mut RgbaImage,
     x: f32,
     y: f32,
@@ -912,7 +912,7 @@ fn connected_components(mask: &[u8], w: usize, h: usize) -> Vec<Component> {
     out
 }
 
-fn fill_rounded_rect(
+pub(crate) fn fill_rounded_rect(
     img: &mut RgbaImage,
     x: f32,
     y: f32,

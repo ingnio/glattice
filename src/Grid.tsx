@@ -4,7 +4,8 @@ import { convertFileSrc, FrameThumb, InputEvent } from "./lib/tauri";
 import { FrameEdits, getFrameEdits } from "./lib/edits";
 import { drawAnnotation, drawClicks, drawCursor, drawKeys, drawSpotlight, paintEdit } from "./lib/paintEdits";
 import { AnnotationPos, SheetDraft, SpotlightDraft } from "./lib/prefs";
-import { IconBack, IconEye, IconInfo, IconPlus, IconTrash, IconX } from "./icons";
+import { TrimRange } from "./lib/trim";
+import { IconEye, IconInfo, IconPlus, IconTrash, IconX } from "./icons";
 
 interface Props {
   thumbs: FrameThumb[];
@@ -13,18 +14,18 @@ interface Props {
   spotlight: SpotlightDraft;
   sheet: SheetDraft;
   onSheetChange: (update: Partial<SheetDraft>) => void;
-  trim: { inIdx: number; outIdx: number } | null;
+  trim: TrimRange | null;
   /** Original indices no longer in frameOrder (deleted frames). */
   deletedIndices: number[];
   onRestore: (index: number) => void;
   onZoom: (index: number) => void;
-  onReorder: (newOrder: number[]) => void;
+  /** `moved` is the frame that was dragged. */
+  onReorder: (newOrder: number[], moved: number) => void;
   onDelete: (indices: number[]) => void;
   frameDelays: Record<number, number>;
   onDelayChange: (frameIndex: number, extraMs: number) => void;
   onInsertBlank: () => void;
   onPreview: () => void;
-  onBack: () => void;
   compactNavButton?: React.ReactNode;
 }
 
@@ -45,9 +46,10 @@ export default function Grid({
   onDelayChange,
   onInsertBlank,
   onPreview,
-  onBack,
   compactNavButton,
 }: Props) {
+  // Sprite-sheet layout controls stay tucked away until asked for.
+  const [sheetBarOpen, setSheetBarOpen] = useState(false);
   // ——— selection ———
   const [selectedSet, setSelectedSet] = useState<Set<number>>(new Set());
   const lastClickedPosRef = useRef<number | null>(null);
@@ -132,7 +134,7 @@ export default function Grid({
       const order = thumbs.map((t) => t.index);
       const [moved] = order.splice(src, 1);
       order.splice(src < dst ? dst - 1 : dst, 0, moved);
-      onReorder(order);
+      onReorder(order, moved);
     },
     [thumbs, onReorder],
   );
@@ -158,7 +160,7 @@ export default function Grid({
   }, []);
 
   const trimLabel =
-    trim !== null ? ` · trim ${trim.inIdx + 1}–${trim.outIdx + 1}` : "";
+    trim !== null ? ` · trim ${trim.inPos + 1}–${trim.outPos + 1}` : "";
 
   // Effective column count for the live sheet layout preview.
   // zoomScale > 1 → fewer columns → bigger thumbnails. Works in both modes.
@@ -172,9 +174,6 @@ export default function Grid({
     <div className="grid-view">
       {/* ——— Chrome ——— */}
       <div className="grid-view__chrome">
-        <button type="button" className="icon-btn" onClick={onBack} title="Back to player">
-          <IconBack size={18} />
-        </button>
         <div className="grid-view__title">
           Frames{" "}
           <span className="muted">
@@ -235,6 +234,15 @@ export default function Grid({
           )}
           <button
             type="button"
+            className={`chip ${sheetBarOpen ? "chip--active" : ""}`}
+            onClick={() => setSheetBarOpen((o) => !o)}
+            aria-expanded={sheetBarOpen}
+            title="Sprite sheet layout: columns, padding, background and labels"
+          >
+            Sheet layout
+          </button>
+          <button
+            type="button"
             className="icon-btn"
             onClick={onInsertBlank}
             title="Insert blank frame"
@@ -253,14 +261,16 @@ export default function Grid({
         </div>
       </div>
 
-      {/* ——— Sheet settings strip ——— */}
+      {/* ——— Sheet settings strip (opened from the "Sheet layout" chip) ——— */}
+      {sheetBarOpen && (
       <div className="grid-view__sheet-bar">
         <div className="sheet-view__group">
+          <span className="muted sheet-bar__label">Columns</span>
           <button
             type="button"
             className={`chip ${sheet.columnsMode === "auto" ? "chip--active" : ""}`}
             onClick={() => onSheetChange({ columnsMode: "auto" })}
-            title="Auto columns"
+            title="Pick the number of columns automatically"
           >
             Auto
           </button>
@@ -268,15 +278,15 @@ export default function Grid({
             type="button"
             className={`chip ${sheet.columnsMode === "manual" ? "chip--active" : ""}`}
             onClick={() => onSheetChange({ columnsMode: "manual" })}
-            title="Manual columns"
+            title="Set the number of columns yourself"
           >
-            Manual
+            Set
           </button>
           {sheet.columnsMode === "manual" && (
             <input
               type="number" min={1} max={20} value={sheet.columns}
               onChange={(e) => onSheetChange({ columns: Math.max(1, Math.min(20, Number(e.target.value) || 1)) })}
-              className="sheet-view__num" title="Columns"
+              className="sheet-view__num" title="Number of columns" aria-label="Number of columns"
             />
           )}
         </div>
@@ -284,7 +294,7 @@ export default function Grid({
         <span className="sheet-view__sep" />
 
         <div className="sheet-view__group">
-          <span className="muted" style={{ fontSize: 11 }}>Pad</span>
+          <span className="muted sheet-bar__label">Padding</span>
           <input
             type="range" min={0} max={40} step={1} value={sheet.padding}
             onChange={(e) => onSheetChange({ padding: Number(e.target.value) })}
@@ -296,7 +306,7 @@ export default function Grid({
         <span className="sheet-view__sep" />
 
         <div className="sheet-view__group">
-          <span className="muted" style={{ fontSize: 11 }}>Border</span>
+          <span className="muted sheet-bar__label">Border</span>
           <input
             type="range" min={0} max={10} step={1} value={sheet.borderWidth ?? 0}
             onChange={(e) => onSheetChange({ borderWidth: Number(e.target.value) })}
@@ -309,24 +319,28 @@ export default function Grid({
 
         <div className="sheet-view__group">
           <label className="sheet-view__field">
-            <span className="muted">Max-w</span>
+            <span className="muted sheet-bar__label">Max width</span>
             <input
-              type="number" min={0} placeholder="—" value={sheet.maxWidth ?? ""}
+              type="number" min={0} placeholder="none" value={sheet.maxWidth ?? ""}
               onChange={(e) => {
                 const v = e.target.value;
                 onSheetChange({ maxWidth: v === "" ? null : Math.max(0, Number(v) || 0) || null });
               }}
-              className="sheet-view__num sheet-view__num--wide" title="Max width px"
+              className="sheet-view__num sheet-view__num--wide"
+              title="Scale the sheet down to at most this many pixels wide. Leave empty for full size."
             />
+            <span className="muted sheet-bar__label">px</span>
           </label>
         </div>
 
         <span className="sheet-view__sep" />
 
         <div className="sheet-view__group">
+          <span className="muted sheet-bar__label">Background</span>
           <input
             type="color" value={sheet.bgHex} disabled={sheet.bgTransparent}
-            onChange={(e) => onSheetChange({ bgHex: e.target.value })} title="Background color"
+            onChange={(e) => onSheetChange({ bgHex: e.target.value })}
+            title="Background color" aria-label="Background color"
           />
           <button
             type="button"
@@ -341,19 +355,22 @@ export default function Grid({
         <span className="sheet-view__sep" />
 
         <div className="sheet-view__group">
+          <span className="muted sheet-bar__label">Label each frame</span>
           <button
             type="button"
             className={`chip ${sheet.showFrameNumber ? "chip--active" : ""}`}
             onClick={() => onSheetChange({ showFrameNumber: !sheet.showFrameNumber })}
-            title="Show frame number"
+            aria-pressed={sheet.showFrameNumber}
+            title="Print the frame number on each frame"
           >
-            Frame #
+            Number
           </button>
           <button
             type="button"
             className={`chip ${sheet.showTimestamp ? "chip--active" : ""}`}
             onClick={() => onSheetChange({ showTimestamp: !sheet.showTimestamp })}
-            title="Show timestamp"
+            aria-pressed={sheet.showTimestamp}
+            title="Print the time since the start on each frame"
           >
             Time
           </button>
@@ -361,25 +378,31 @@ export default function Grid({
             <select
               value={sheet.annotationPosition}
               onChange={(e) => onSheetChange({ annotationPosition: e.target.value as AnnotationPos })}
-              title="Annotation position"
+              title="Corner the label goes in"
+              aria-label="Corner the label goes in"
               className="sheet-view__pos-select"
             >
-              <option value="top-left">↖</option>
-              <option value="top-right">↗</option>
-              <option value="bottom-left">↙</option>
-              <option value="bottom-right">↘</option>
+              <option value="top-left">Top left</option>
+              <option value="top-right">Top right</option>
+              <option value="bottom-left">Bottom left</option>
+              <option value="bottom-right">Bottom right</option>
             </select>
           )}
         </div>
       </div>
+      )}
 
       {/* ——— Grid body — live sheet layout preview ———
             Outer div: full-width, provides the background colour/checkerboard.
             Inner div: centred, constrained by max-width, holds the grid cells. */}
       <div
         ref={gridBodyRef}
-        className={`grid-view__body ${sheet.bgTransparent ? "grid-view__body--transparent" : ""}`}
-        style={{ background: sheet.bgTransparent ? undefined : sheet.bgHex }}
+        // The sheet's own background is only previewed while its layout
+        // controls are open. The rest of the time this is a place to
+        // arrange frames, and it uses the app's surface so it isn't a
+        // white slab in the dark theme.
+        className={`grid-view__body ${sheetBarOpen && sheet.bgTransparent ? "grid-view__body--transparent" : ""}`}
+        style={{ background: sheetBarOpen && !sheet.bgTransparent ? sheet.bgHex : undefined }}
         onDoubleClick={(e) => {
           // Double-click on the background (not a frame) resets zoom.
           if (!(e.target as HTMLElement).closest(".grid-frame")) resetZoom();
@@ -424,6 +447,7 @@ export default function Grid({
         {thumbs.map((t, pos) => {
           const isSelected = selectedSet.has(t.index);
           const isDragging = dragSrcPos === pos;
+          const isTrimmed = trim !== null && (pos < trim.inPos || pos > trim.outPos);
           const lineLeft = dropPos === pos && dragSrcPos !== pos;
           const lineRight =
             pos === thumbs.length - 1 && dropPos === thumbs.length && dragSrcPos !== pos;
@@ -434,6 +458,7 @@ export default function Grid({
                 "grid-frame",
                 isSelected ? "grid-frame--selected" : "",
                 isDragging ? "grid-frame--dragging" : "",
+                isTrimmed ? "grid-frame--trimmed" : "",
                 lineLeft ? "grid-frame--line-left" : "",
                 lineRight ? "grid-frame--line-right" : "",
               ].filter(Boolean).join(" ")}
@@ -475,10 +500,27 @@ export default function Grid({
                 frameIndex={t.index}
               />
               <span className="grid-frame__index">{pos + 1}</span>
+              {isTrimmed && <span className="grid-frame__trimmed-tag">Trimmed</span>}
             </div>
           );
         })}
       </div>
+      </div>
+
+      {/* The grid's gestures aren't visible on the frames themselves, so
+          say them once here. */}
+      <div className="grid-view__hints muted">
+        {selectedSet.size > 0 ? (
+          <span>
+            {selectedSet.size} selected · <kbd>Delete</kbd> removes · right-click for more ·
+            click empty space to clear
+          </span>
+        ) : (
+          <span>
+            Drag to reorder · double-click to edit · right-click for more ·{" "}
+            <kbd>Ctrl</kbd> or <kbd>Shift</kbd>+click to select several
+          </span>
+        )}
       </div>
 
       {propertiesTargets !== null && (
@@ -517,7 +559,7 @@ export default function Grid({
               }}
             >
               <span className="context-menu__icon"><IconInfo size={13} /></span>
-              Properties
+              Hold longer…
             </button>
             <button
               type="button"
@@ -571,7 +613,7 @@ function FramePropertiesModal({
       <div className="frame-props-modal" onClick={(e) => e.stopPropagation()}>
         <div className="frame-props-modal__chrome">
           <span className="frame-props-modal__title">
-            {targets.length > 1 ? `${targets.length} Frames` : "Frame"} — Properties
+            {targets.length > 1 ? `Hold ${targets.length} frames longer` : "Hold this frame longer"}
           </span>
           <button type="button" className="icon-btn" onClick={onClose} title="Close">
             <IconX size={16} />
@@ -579,7 +621,7 @@ function FramePropertiesModal({
         </div>
         <div className="frame-props-modal__body">
           <label className="row">
-            <span>Duration</span>
+            <span>Extra time on screen</span>
             <div className="row__control" style={{ gap: 6 }}>
               <input
                 type="number"
@@ -598,8 +640,8 @@ function FramePropertiesModal({
             </div>
           </label>
           <p className="row__hint muted">
-            Extra hold time added to this frame's natural duration in the
-            exported video. 0 = use the recording's fps.
+            Added on top of the frame's normal time, in playback and in
+            every export. 1000 ms is one second; 0 plays it at normal speed.
           </p>
         </div>
         <div className="frame-props-modal__footer">

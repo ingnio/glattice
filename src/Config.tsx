@@ -1,12 +1,13 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { IconBack, IconFolder } from "./icons";
-import { Preferences } from "./lib/prefs";
+import { Preferences, Theme } from "./lib/prefs";
 
 interface Props {
   prefs: Preferences;
   highQualityAvailable: boolean;
   onChange: (update: Partial<Preferences>) => void;
   onBack: () => void;
+  onShowShortcuts: () => void;
 }
 
 const FPS_PRESETS = [2, 5, 10, 15, 30];
@@ -17,6 +18,7 @@ export default function Config({
   highQualityAvailable,
   onChange,
   onBack,
+  onShowShortcuts,
 }: Props) {
   const pickSaveDir = async () => {
     const picked = await open({ directory: true, multiple: false });
@@ -28,16 +30,80 @@ export default function Config({
   return (
     <div className="config">
       <div className="config__chrome">
-        <button type="button" className="icon-btn" onClick={onBack}>
+        <button
+          type="button"
+          className="icon-btn"
+          onClick={onBack}
+          title="Back to Home"
+          aria-label="Back to Home"
+        >
           <IconBack />
         </button>
         <h2 className="config__title">Settings</h2>
       </div>
 
       <div className="config__body">
+        <h3 className="config__group">Appearance</h3>
+
+        <section className="config__section">
+          <div className="row">
+            <span>Theme</span>
+            <div className="row__control fps-row">
+              {(["light", "dark", "system"] as Theme[]).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  className={`chip ${prefs.theme === t ? "chip--active" : ""}`}
+                  onClick={() => onChange({ theme: t })}
+                >
+                  {t.charAt(0).toUpperCase() + t.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+
         <section className="config__section">
           <label className="row">
-            <span>Default FPS</span>
+            <span>Compact layout</span>
+            <div className="row__control">
+              <label className="switch">
+                <input
+                  type="checkbox"
+                  checked={prefs.compactUi}
+                  onChange={(e) =>
+                    onChange({ compactUi: e.target.checked })
+                  }
+                />
+                <span className="slider" />
+              </label>
+            </div>
+          </label>
+          <p className="row__hint muted">
+            Tighter spacing for a denser home screen. Also available from the
+            Compact button on Home.
+          </p>
+        </section>
+
+        <section className="config__section">
+          <div className="row">
+            <span>Keyboard shortcuts</span>
+            <div className="row__control">
+              <button type="button" className="btn btn--sm" onClick={onShowShortcuts}>
+                Show list
+              </button>
+            </div>
+          </div>
+          <p className="row__hint muted">
+            Press <kbd>?</kbd> anywhere to see them.
+          </p>
+        </section>
+
+        <h3 className="config__group">Recording</h3>
+
+        <section className="config__section">
+          <label className="row">
+            <span>Frames per second</span>
             <div className="row__control fps-row">
               {FPS_PRESETS.map((p) => (
                 <button
@@ -65,6 +131,10 @@ export default function Config({
               />
             </div>
           </label>
+          <p className="row__hint muted">
+            Higher is smoother but makes bigger files. 5 to 10 suits most
+            screen recordings.
+          </p>
         </section>
 
         <section className="config__section">
@@ -96,10 +166,10 @@ export default function Config({
           </div>
           <p className="row__hint muted">
             {prefs.cursorMode === "off"
-              ? "No cursor in the recording."
+              ? "The cursor is left out of the recording."
               : prefs.cursorMode === "baked"
-                ? "Cursor drawn directly into each frame."
-                : "Cursor recorded as metadata and re-drawn on top of any edits — keeps the cursor visible without exposing it to simplify, blur, etc."}
+                ? "The cursor is part of the picture, so a blur or shape you add later can cover it."
+                : "The cursor is drawn on top of your edits, so a blur or shape you add later never hides it."}
           </p>
         </section>
 
@@ -120,8 +190,7 @@ export default function Config({
             </div>
           </label>
           <p className="row__hint muted">
-            Captures mouse-click positions during recording and overlays
-            an expanding ring at each click.
+            Marks every mouse click with a ring that spreads out and fades.
           </p>
         </section>
 
@@ -142,8 +211,8 @@ export default function Config({
             </div>
           </div>
           <p className="row__hint muted">
-            Delay before recording actually starts so you can position the
-            target window. ESC cancels the countdown.
+            A pause before recording starts, so you can get the window
+            ready. Esc cancels it.
           </p>
         </section>
 
@@ -164,14 +233,14 @@ export default function Config({
             </div>
           </label>
           <p className="row__hint muted">
-            Captures key presses during recording and shows the most
-            recent ones in a corner of the playback.
+            Shows the keys you press in the bottom-left corner of the
+            recording.
           </p>
         </section>
 
         <section className="config__section">
           <label className="row">
-            <span>Record audio</span>
+            <span>Record microphone</span>
             <div className="row__control">
               <label className="switch">
                 <input
@@ -186,60 +255,8 @@ export default function Config({
             </div>
           </label>
           <p className="row__hint muted">
-            Captures the default mic during recording. Audio is muxed
-            into MP4 / WebM exports — GIFs are silent.
-          </p>
-        </section>
-
-        <section className="config__section">
-          <label
-            className="row"
-            title={
-              highQualityAvailable
-                ? ""
-                : "This build was compiled without gifski support. Rebuild with --features gifski (AGPL)."
-            }
-          >
-            <span>High quality GIF</span>
-            <div className="row__control">
-              <label className="switch">
-                <input
-                  type="checkbox"
-                  checked={prefs.highQuality}
-                  disabled={!highQualityAvailable}
-                  onChange={(e) =>
-                    onChange({ highQuality: e.target.checked })
-                  }
-                />
-                <span className="slider" />
-              </label>
-            </div>
-          </label>
-          <p className="row__hint muted">
-            {highQualityAvailable
-              ? "Uses gifski's pngquant-based palette optimisation. Noticeably slower to encode."
-              : "Unavailable in this build. Rebuild with the gifski Cargo feature to enable."}
-          </p>
-        </section>
-
-        <section className="config__section">
-          <label className="row">
-            <span>Compact UI</span>
-            <div className="row__control">
-              <label className="switch">
-                <input
-                  type="checkbox"
-                  checked={prefs.compactUi}
-                  onChange={(e) =>
-                    onChange({ compactUi: e.target.checked })
-                  }
-                />
-                <span className="slider" />
-              </label>
-            </div>
-          </label>
-          <p className="row__hint muted">
-            Hides the hero artwork and tightens spacing for a denser home view.
+            Records your default microphone. The sound is included when
+            you export MP4 or WebM; GIFs are always silent.
           </p>
         </section>
 
@@ -258,22 +275,47 @@ export default function Config({
                   })
                 }
               >
-                <option value="low">Low — big windows only</option>
+                <option value="low">Low — large windows only</option>
                 <option value="medium">Medium — visible windows</option>
-                <option value="high">High — panels & sub-windows</option>
+                <option value="high">High — includes panels & inner windows</option>
               </select>
             </div>
           </label>
           <p className="row__hint muted">
-            How aggressively the region-select overlay detects window edges
-            for snapping. High picks up toolbars and individual panels inside
-            apps; low sticks to big top-level windows.
+            When you select a region, it snaps to window edges. Higher settings
+            also snap to toolbars and panels inside apps.
+          </p>
+        </section>
+
+        <h3 className="config__group">Output</h3>
+
+        <section className="config__section">
+          <label className="row">
+            <span>High quality GIF</span>
+            <div className="row__control">
+              <label className="switch">
+                <input
+                  type="checkbox"
+                  checked={prefs.highQuality}
+                  disabled={!highQualityAvailable}
+                  onChange={(e) =>
+                    onChange({ highQuality: e.target.checked })
+                  }
+                />
+                <span className="slider" />
+              </label>
+            </div>
+          </label>
+          <p className="row__hint muted">
+            {highQualityAvailable
+              ? "Better colors and smoother gradients in recorded GIFs. Recordings take noticeably longer to finish."
+              : "Not included in this version of Glattice."}
           </p>
         </section>
 
         <section className="config__section">
           <div className="row">
-            <span>Spotlight</span>
+            <span>Spotlight by default</span>
             <div className="row__control">
               <label className="switch">
                 <input
@@ -320,17 +362,35 @@ export default function Config({
             </div>
           </label>
           <p className="row__hint muted">
-            Dims everything outside a spotlight circle around the cursor during
-            playback and export. Only applies when cursor tracking is enabled.
+            Dims everything outside a circle around the cursor, in playback
+            and in exports. New recordings start with it on or off as set
+            here; switch it for a single recording in the Player or the
+            Editor. It follows the recorded cursor, so Cursor has to be set
+            to Show or Overlay.
           </p>
+          {prefs.spotlight.enabled && prefs.cursorMode === "off" && (
+            <div className="config__note" role="status">
+              <span>
+                Cursor is set to Off, so new recordings will have no cursor
+                for the spotlight to follow.
+              </span>
+              <button
+                type="button"
+                className="btn btn--sm"
+                onClick={() => onChange({ cursorMode: "overlay" })}
+              >
+                Use Overlay cursor
+              </button>
+            </div>
+          )}
         </section>
 
         <section className="config__section">
           <label className="row">
-            <span>Default save folder</span>
+            <span>Save folder</span>
             <div className="row__control save-dir">
               <span className="save-dir__path muted">
-                {prefs.defaultSaveDir ?? "Ask every time"}
+                {prefs.defaultSaveDir ?? "Not set"}
               </span>
               <button
                 type="button"
@@ -346,13 +406,15 @@ export default function Config({
                   className="link-btn"
                   onClick={() => onChange({ defaultSaveDir: null })}
                 >
-                  clear
+                  Clear
                 </button>
               )}
             </div>
           </label>
           <p className="row__hint muted">
-            Save dialogs will open here by default when exporting a sprite sheet.
+            {prefs.defaultSaveDir
+              ? "Every export (GIF, MP4, WebM, sprite sheet, single frame) starts in this folder. You can still pick another one each time."
+              : "Choose a folder and every export will start there. Until then, the save dialog opens wherever you saved last."}
           </p>
         </section>
       </div>

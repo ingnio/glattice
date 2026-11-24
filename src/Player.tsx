@@ -9,26 +9,22 @@ import {
   paintEdit,
 } from "./lib/paintEdits";
 import type { SpotlightDraft } from "./lib/prefs";
+import { applyTrim, TrimRange } from "./lib/trim";
 import { useCtrlWheelZoom } from "./lib/useCtrlWheelZoom";
 import {
   IconBoomerang,
   IconLoop,
   IconLoopOnce,
-  IconMore,
   IconNext,
   IconPause,
   IconPlay,
   IconPrev,
   IconSave,
+  IconSpotlight,
   IconX,
 } from "./icons";
 
 const SPEEDS = [0.25, 0.5, 1, 1.5, 2, 4];
-
-export interface TrimRange {
-  inIdx: number;
-  outIdx: number;
-}
 
 interface Props {
   thumbs: FrameThumb[];
@@ -44,7 +40,13 @@ interface Props {
   onBack: () => void;
   onSaveGif: () => void;
   onSaveVideo: (format: "mp4" | "webm") => void;
+  onExportSheet: () => void;
   spotlight: SpotlightDraft;
+  /** Turn this clip's spotlight on or off. */
+  onSpotlightChange: (update: Partial<SpotlightDraft>) => void;
+  /** False when the clip has no recorded cursor for the spotlight to
+   *  follow. The control then explains itself instead of toggling. */
+  spotlightAvailable: boolean;
   /** Extra hold time in ms per original frame index. 0 / absent = no hold. */
   frameDelays: Record<number, number>;
   playing: boolean;
@@ -68,7 +70,10 @@ export default function Player({
   onBack,
   onSaveGif,
   onSaveVideo,
+  onExportSheet,
   spotlight,
+  onSpotlightChange,
+  spotlightAvailable,
   frameDelays,
   playing,
   onPlayingChange,
@@ -78,26 +83,18 @@ export default function Player({
   onSpeedChange,
   compactNavButton,
 }: Props) {
-  // Effective trim bounds in ORIGINAL frame indices. When trim is null
-  // we treat the bounds as the full range — that way the scrubber
-  // handles always have a defined position.
-  const trimIn = trim?.inIdx ?? 0;
-  // trimOut for scrubber display only. NOT used for playable filtering
-  // when trim is null — frame indices aren't contiguous (gaps from
-  // deleted frames, blank frames appended at high indices), so
-  // thumbs.length-1 would incorrectly exclude out-of-range indices.
-  const trimOut = trim?.outIdx ?? Math.max(0, thumbs.length - 1);
+  // Effective trim bounds as POSITIONS in `thumbs` (the displayed frame
+  // order), both inclusive. Positions, not original frame indices: after
+  // a frame is deleted, inserted or moved, indices have gaps and no
+  // longer line up with the scrubber. With no trim the bounds are the
+  // whole clip, so the scrubber handles always have a defined place.
+  const lastPos = Math.max(0, thumbs.length - 1);
+  const trimIn = trim ? Math.max(0, Math.min(trim.inPos, lastPos)) : 0;
+  const trimOut = trim ? Math.max(trimIn, Math.min(trim.outPos, lastPos)) : lastPos;
   const trimActive = trim !== null;
 
-  // When no trim is active, all thumbs play. When trim is set, filter
-  // by original index so only frames within the trim window play.
-  const playable = useMemo(
-    () =>
-      trim === null
-        ? thumbs
-        : thumbs.filter((t) => t.index >= trim.inIdx && t.index <= trim.outIdx),
-    [thumbs, trim],
-  );
+  // The frames that play: everything, or the trimmed stretch.
+  const playable = useMemo(() => applyTrim(thumbs, trim), [thumbs, trim]);
   const playableIndices = useMemo(
     () => playable.map((t) => t.index),
     [playable],
@@ -237,20 +234,15 @@ export default function Player({
       return;
     }
     if (!playableIndices.includes(frameIdx)) {
-      // Snap to the closest playable frame (preferring the one to the
-      // right of the current position so trims feel "forward").
-      let best = playableIndices[0];
-      let bestDist = Infinity;
-      for (const idx of playableIndices) {
-        const d = Math.abs(idx - frameIdx);
-        if (d < bestDist) {
-          bestDist = d;
-          best = idx;
-        }
-      }
-      setFrameIdx(best);
+      // Snap to the nearest kept frame, by position in the clip: the
+      // trim's first frame when the playhead is before it, its last
+      // frame when after.
+      const pos = thumbPosByIdx.get(frameIdx);
+      const target =
+        pos === undefined ? trimIn : Math.max(trimIn, Math.min(pos, trimOut));
+      setFrameIdx(thumbs[target]?.index ?? playableIndices[0]);
     }
-  }, [playableIndices, frameIdx, thumbs]);
+  }, [playableIndices, frameIdx, thumbs, thumbPosByIdx, trimIn, trimOut]);
 
   // Draw the current frame to the canvas. Re-runs on every frame
   // change AND on ready-flip + edits change so the preview always
@@ -465,22 +457,22 @@ export default function Player({
     [thumbs.length],
   );
 
+  // Every way of changing the trim ends up here. Both ends are positions
+  // in `thumbs`; a range that covers the whole clip means "no trim".
+  const commitTrim = useCallback(
+    (inPos: number, outPos: number) => {
+      if (inPos <= 0 && outPos >= lastPos) onTrimChange(null);
+      else onTrimChange({ inPos, outPos });
+    },
+    [lastPos, onTrimChange],
+  );
+
   useEffect(() => {
     if (trimDrag === null) return;
     const onMove = (ev: MouseEvent) => {
-      const idx = rawFrameFromClientX(ev.clientX);
-      const lastIdx = thumbs.length - 1;
-      if (trimDrag === "in") {
-        const newIn = Math.min(idx, trimOut);
-        const newOut = trimOut;
-        if (newIn === 0 && newOut === lastIdx) onTrimChange(null);
-        else onTrimChange({ inIdx: newIn, outIdx: newOut });
-      } else {
-        const newOut = Math.max(idx, trimIn);
-        const newIn = trimIn;
-        if (newIn === 0 && newOut === lastIdx) onTrimChange(null);
-        else onTrimChange({ inIdx: newIn, outIdx: newOut });
-      }
+      const pos = rawFrameFromClientX(ev.clientX);
+      if (trimDrag === "in") commitTrim(Math.min(pos, trimOut), trimOut);
+      else commitTrim(trimIn, Math.max(pos, trimIn));
     };
     const onUp = () => setTrimDrag(null);
     window.addEventListener("mousemove", onMove);
@@ -489,26 +481,44 @@ export default function Player({
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
-  }, [trimDrag, rawFrameFromClientX, trimIn, trimOut, onTrimChange, thumbs.length]);
+  }, [trimDrag, rawFrameFromClientX, trimIn, trimOut, commitTrim]);
 
+  // "Start here" / "End here" (and the I / O keys): move that end of the
+  // trim to wherever the playhead is.
   const setTrimToCurrent = useCallback(
     (which: "in" | "out") => {
-      if (thumbs.length === 0) return;
-      const lastIdx = thumbs.length - 1;
-      if (which === "in") {
-        const newIn = Math.min(frameIdx, trimOut);
-        if (newIn === 0 && trimOut === lastIdx) onTrimChange(null);
-        else onTrimChange({ inIdx: newIn, outIdx: trimOut });
-      } else {
-        const newOut = Math.max(frameIdx, trimIn);
-        if (trimIn === 0 && newOut === lastIdx) onTrimChange(null);
-        else onTrimChange({ inIdx: trimIn, outIdx: newOut });
-      }
+      const cur = thumbPosByIdx.get(frameIdx);
+      if (cur === undefined) return;
+      if (which === "in") commitTrim(Math.min(cur, trimOut), trimOut);
+      else commitTrim(trimIn, Math.max(cur, trimIn));
     },
-    [frameIdx, thumbs.length, trimIn, trimOut, onTrimChange],
+    [frameIdx, thumbPosByIdx, trimIn, trimOut, commitTrim],
   );
 
   const clearTrim = useCallback(() => onTrimChange(null), [onTrimChange]);
+
+  // Keyboard equivalent of dragging a trim handle: move it one frame.
+  const nudgeTrim = useCallback(
+    (which: "in" | "out", delta: number) => {
+      if (thumbs.length === 0) return;
+      onPlayingChange(false);
+      if (which === "in") {
+        commitTrim(Math.max(0, Math.min(trimIn + delta, trimOut)), trimOut);
+      } else {
+        commitTrim(trimIn, Math.min(lastPos, Math.max(trimOut + delta, trimIn)));
+      }
+    },
+    [thumbs.length, lastPos, trimIn, trimOut, commitTrim, onPlayingChange],
+  );
+
+  const onTrimKeyDown =
+    (which: "in" | "out") => (e: React.KeyboardEvent) => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      // Keep the arrow keys from also stepping the playhead.
+      e.preventDefault();
+      e.stopPropagation();
+      nudgeTrim(which, e.key === "ArrowLeft" ? -1 : 1);
+    };
 
   // ——— keyboard ———
   useEffect(() => {
@@ -543,19 +553,8 @@ export default function Player({
   const denom = Math.max(1, thumbs.length - 1);
   const currentPos = thumbPosByIdx.get(frameIdx) ?? 0;
   const currentPct = thumbs.length > 0 ? (currentPos / denom) * 100 : 0;
-  const inPct = (() => {
-    if (!trimActive) return 0;
-    const pos = thumbs.findIndex((t) => t.index >= trimIn);
-    return pos < 0 ? 0 : (pos / denom) * 100;
-  })();
-  const outPct = (() => {
-    if (!trimActive) return 100;
-    let last = thumbs.length - 1;
-    for (let i = thumbs.length - 1; i >= 0; i--) {
-      if (thumbs[i].index <= trimOut) { last = i; break; }
-    }
-    return (last / denom) * 100;
-  })();
+  const inPct = trimActive ? (trimIn / denom) * 100 : 0;
+  const outPct = trimActive ? (trimOut / denom) * 100 : 100;
 
   const counterPos =
     playableIndices.indexOf(frameIdx) < 0
@@ -576,13 +575,14 @@ export default function Player({
           <div className="player__save">
             <button
               type="button"
-              className="icon-btn"
+              className="btn btn--sm btn--primary"
               onClick={() => setSaveMenuOpen((o) => !o)}
-              title="Save as…"
+              title="Export as GIF, MP4, WebM or a sprite sheet"
               aria-haspopup="true"
               aria-expanded={saveMenuOpen}
             >
-              <IconSave />
+              <IconSave size={14} />
+              Export
             </button>
             {saveMenuOpen && (
               <>
@@ -621,6 +621,16 @@ export default function Player({
                   >
                     WebM
                   </button>
+                  <button
+                    type="button"
+                    className="player__save-item"
+                    onClick={() => {
+                      setSaveMenuOpen(false);
+                      onExportSheet();
+                    }}
+                  >
+                    Sprite sheet…
+                  </button>
                 </div>
               </>
             )}
@@ -653,7 +663,7 @@ export default function Player({
             />
             {dragSourcePath && (
               <div className="player__drag-hint" aria-hidden="true">
-                ↗ drag out
+                Drag into another app
               </div>
             )}
           </div>
@@ -667,6 +677,27 @@ export default function Player({
             thumbs.length === 0 ? "scrub--disabled" : ""
           } ${trimActive ? "scrub--trimmed" : ""}`}
           onMouseDown={startScrub}
+          role="slider"
+          tabIndex={playable.length === 0 ? -1 : 0}
+          aria-label="Playback position"
+          aria-valuemin={1}
+          aria-valuemax={Math.max(1, playable.length)}
+          aria-valuenow={Math.max(1, counterPos)}
+          aria-valuetext={`Frame ${counterPos} of ${playable.length}`}
+          title="Drag to scrub. Arrow keys step one frame; Home and End jump to the ends"
+          onKeyDown={(e) => {
+            // Arrow keys are handled by the Player's global shortcuts.
+            if (playableIndices.length === 0) return;
+            if (e.key === "Home") {
+              e.preventDefault();
+              onPlayingChange(false);
+              setFrameIdx(playableIndices[0]);
+            } else if (e.key === "End") {
+              e.preventDefault();
+              onPlayingChange(false);
+              setFrameIdx(playableIndices[playableIndices.length - 1]);
+            }
+          }}
         >
           <div className="scrub__track" />
           {/* Dimmed regions for the trimmed-out areas. */}
@@ -705,7 +736,14 @@ export default function Player({
             }`}
             style={{ left: `${inPct}%` }}
             onMouseDown={startTrimDrag("in")}
-            title="Drag to set in point (or press I)"
+            onKeyDown={onTrimKeyDown("in")}
+            role="slider"
+            tabIndex={thumbs.length === 0 ? -1 : 0}
+            aria-label="Trim start"
+            aria-valuemin={1}
+            aria-valuemax={trimOut + 1}
+            aria-valuenow={trimIn + 1}
+            title="Trim start: drag, or focus and use the arrow keys. Press I to set it to the current frame"
           />
           <div
             className={`scrub__trim-handle scrub__trim-handle--out ${
@@ -713,7 +751,14 @@ export default function Player({
             }`}
             style={{ left: `${outPct}%` }}
             onMouseDown={startTrimDrag("out")}
-            title="Drag to set out point (or press O)"
+            onKeyDown={onTrimKeyDown("out")}
+            role="slider"
+            tabIndex={thumbs.length === 0 ? -1 : 0}
+            aria-label="Trim end"
+            aria-valuemin={trimIn + 1}
+            aria-valuemax={Math.max(1, thumbs.length)}
+            aria-valuenow={trimOut + 1}
+            title="Trim end: drag, or focus and use the arrow keys. Press O to set it to the current frame"
           />
         </div>
       </div>
@@ -756,10 +801,10 @@ export default function Player({
           }}
           title={
             loop === "loop"
-              ? "Looping — click for boomerang"
+              ? "Repeat: loop. Click for back and forth"
               : loop === "boomerang"
-                ? "Boomerang — click to play once"
-                : "Play once — click to loop"
+                ? "Repeat: back and forth. Click to play once"
+                : "Repeat: play once. Click to loop"
           }
         >
           {loop === "loop" ? (
@@ -773,13 +818,13 @@ export default function Player({
         <div className="player__speed">
           <button
             type="button"
-            className={`icon-btn ${speed !== 1 ? "icon-btn--active" : ""}`}
+            className={`chip player__speed-btn ${speed !== 1 ? "chip--active" : ""}`}
             onClick={() => setSpeedMenuOpen((o) => !o)}
-            title={`Playback speed: ${speed}×`}
+            title="Playback speed"
             aria-haspopup="true"
             aria-expanded={speedMenuOpen}
           >
-            <IconMore />
+            {speed}×
           </button>
           {speedMenuOpen && (
             <>
@@ -806,26 +851,68 @@ export default function Player({
             </>
           )}
         </div>
+        {/* Spotlight changes what is played and exported, so its state
+            is always visible here. Without a recorded cursor it can't do
+            anything; it then looks unavailable and, when clicked, says
+            why (handled by the parent). */}
+        <button
+          type="button"
+          className={`icon-btn ${spotlight.enabled ? "icon-btn--active" : ""} ${
+            spotlightAvailable ? "" : "icon-btn--unavailable"
+          }`}
+          onClick={() => onSpotlightChange({ enabled: !spotlight.enabled })}
+          aria-pressed={spotlight.enabled}
+          aria-label="Spotlight"
+          title={
+            !spotlightAvailable
+              ? "Spotlight needs a recorded cursor, and this clip has none"
+              : spotlight.enabled
+                ? "Spotlight is on: everything outside a circle around the cursor is dimmed. Click to turn it off"
+                : "Spotlight: dim everything outside a circle around the cursor"
+          }
+        >
+          <IconSpotlight active={spotlight.enabled} />
+        </button>
+        {/* The frame counter stays with the transport; everything about
+            trimming is one group, so it wraps as a unit in narrow windows. */}
         <div className="player__counter muted">
-          {playable.length > 0 ? (
-            <>
-              {counterPos} / {playable.length}
-              {trimActive && (
-                <span className="player__trim-tag" title="Trim is active">
-                  · trim {trimIn + 1}-{trimOut + 1}
-                  <button
-                    type="button"
-                    className="player__trim-clear"
-                    onClick={clearTrim}
-                    title="Clear trim (X)"
-                  >
-                    <IconX size={12} />
-                  </button>
-                </span>
-              )}
-            </>
-          ) : (
-            "—"
+          {playable.length > 0 ? `${counterPos} / ${playable.length}` : "—"}
+        </div>
+        <div className="player__trim" role="group" aria-label="Trim">
+          <span className="muted player__trim-label">Trim</span>
+          <button
+            type="button"
+            className="chip"
+            onClick={() => setTrimToCurrent("in")}
+            disabled={thumbs.length === 0}
+            title="Start the clip at the current frame (I)"
+          >
+            Start here
+          </button>
+          <button
+            type="button"
+            className="chip"
+            onClick={() => setTrimToCurrent("out")}
+            disabled={thumbs.length === 0}
+            title="End the clip at the current frame (O)"
+          >
+            End here
+          </button>
+          {trimActive && (
+            <span
+              className="player__trim-tag"
+              title={`Playing frames ${trimIn + 1} to ${trimOut + 1}`}
+            >
+              {trimIn + 1}–{trimOut + 1}
+              <button
+                type="button"
+                className="player__trim-clear"
+                onClick={clearTrim}
+                title="Clear trim (X)"
+              >
+                <IconX size={12} />
+              </button>
+            </span>
           )}
         </div>
       </div>

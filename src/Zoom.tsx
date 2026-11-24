@@ -17,7 +17,6 @@ import { drawClicks, drawCursor, drawKeys, drawSpotlight, paintEdit } from "./li
 import type { SimplifyDraft, SpotlightDraft } from "./lib/prefs";
 import {
   IconArrow,
-  IconBack,
   IconBlur,
   IconCircleTool,
   IconCopyAll,
@@ -43,11 +42,20 @@ interface Props {
   simplify: SimplifyDraft;
   spotlight: SpotlightDraft;
   onSpotlightChange: (update: Partial<SpotlightDraft>) => void;
+  /** False when the clip has no recorded cursor for the spotlight to
+   *  follow. The chip then explains itself instead of toggling. */
+  spotlightAvailable: boolean;
   onBack: () => void;
   onNavigate: (index: number) => void;
   onDelete: (index: number) => void;
   onEditsChange: (edits: FrameEdits) => void;
   onSimplifyChange: (update: Partial<SimplifyDraft>) => void;
+  /** Suggested save path for "Export frame", without the frame number
+   *  or extension (`…/recording-…-frame`). */
+  exportPath: string;
+  /** Called with the saved file's path after a frame is exported. */
+  onSaved: (path: string) => void;
+  onError: (message: string) => void;
   compactNavButton?: React.ReactNode;
 }
 
@@ -59,11 +67,15 @@ export default function Zoom({
   simplify,
   spotlight,
   onSpotlightChange,
+  spotlightAvailable,
   onBack,
   onNavigate,
   onDelete,
   onEditsChange,
   onSimplifyChange,
+  exportPath,
+  onSaved,
+  onError,
   compactNavButton,
 }: Props) {
   const pos = thumbs.findIndex((t) => t.index === index);
@@ -149,8 +161,53 @@ export default function Zoom({
     setEditingTextIdx(null);
   }, [current?.index, tool]);
 
+  // Undo removes the frame's newest edit; redo puts back what undo
+  // removed. The redo list is per frame and is dropped as soon as a new
+  // edit is drawn, like any linear undo history.
+  const redoRef = useRef<Record<number, Edit[]>>({});
+  const [, setRedoTick] = useState(0);
+
+  const undo = useCallback(() => {
+    if (!current || frameEdits.length === 0) return;
+    const removed = frameEdits[frameEdits.length - 1];
+    const next = frameEdits.slice(0, -1);
+    (redoRef.current[current.index] ??= []).push(removed);
+    setRedoTick((t) => t + 1);
+    onEditsChange(setFrameEdits(edits, current.index, next));
+    if (selectedIdx !== null && selectedIdx >= next.length) {
+      setSelectedIdx(null);
+    }
+  }, [current, frameEdits, edits, onEditsChange, selectedIdx]);
+
+  const redo = useCallback(() => {
+    if (!current) return;
+    const restored = redoRef.current[current.index]?.pop();
+    if (!restored) return;
+    setRedoTick((t) => t + 1);
+    onEditsChange(
+      setFrameEdits(edits, current.index, [...frameEdits, restored]),
+    );
+  }, [current, frameEdits, edits, onEditsChange]);
+
+  const clearRedo = useCallback(() => {
+    if (!current) return;
+    if ((redoRef.current[current.index]?.length ?? 0) === 0) return;
+    redoRef.current[current.index] = [];
+    setRedoTick((t) => t + 1);
+  }, [current]);
+
+  // Deleting a frame always asks first, whether it comes from the button
+  // or the Delete key. The frame stays restorable from the Frames tab.
+  const deleteFrame = useCallback(() => {
+    if (!current) return;
+    const ok = window.confirm(
+      `Delete frame ${pos + 1}? You can restore it from the Frames tab.`,
+    );
+    if (ok) onDelete(current.index);
+  }, [current, pos, onDelete]);
+
   // Keyboard shortcuts. Delete removes the selected edit when one is
-  // focused, otherwise falls through to toggling frame exclude.
+  // focused, otherwise it deletes the frame (after confirming).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
@@ -172,16 +229,20 @@ export default function Zoom({
           const next = frameEdits.filter((_, i) => i !== selectedIdx);
           onEditsChange(setFrameEdits(edits, current.index, next));
           setSelectedIdx(null);
-        } else if (current) {
-          onDelete(current.index);
+        } else {
+          deleteFrame();
         }
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
-        if (current && frameEdits.length > 0) {
-          const next = frameEdits.slice(0, -1);
-          onEditsChange(setFrameEdits(edits, current.index, next));
-          if (selectedIdx !== null && selectedIdx >= next.length) {
-            setSelectedIdx(null);
-          }
+        if (e.shiftKey) redo();
+        else undo();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
+        redo();
+      } else if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+        // Single letters pick a tool (listed in ShortcutsModal).
+        const picked = TOOL_KEYS[e.key.toLowerCase()];
+        if (picked && !drafting) {
+          setTool(picked);
+          setSelectedIdx(null);
         }
       }
     };
@@ -199,6 +260,9 @@ export default function Zoom({
     frameEdits,
     onEditsChange,
     selectedIdx,
+    undo,
+    redo,
+    deleteFrame,
   ]);
 
   // ——— Canvas sizing + repaint ———
@@ -356,9 +420,10 @@ export default function Zoom({
     (e: Edit) => {
       if (!current) return;
       const next = [...frameEdits, e];
+      clearRedo();
       onEditsChange(setFrameEdits(edits, current.index, next));
     },
-    [current, edits, frameEdits, onEditsChange],
+    [current, edits, frameEdits, onEditsChange, clearRedo],
   );
 
   // Square-lock helper. When `square` is true, the larger of |dx|/|dy|
@@ -397,32 +462,53 @@ export default function Zoom({
       lastPointRef.current = { x: p.x, y: p.y };
       shiftRef.current = evt.shiftKey;
 
-      if (tool === "select") {
-        const rect = canvas.getBoundingClientRect();
-        const scale = rect.width > 0 ? canvas.width / rect.width : 1;
-        const handleTol = HANDLE_DISPLAY_SIZE * scale * 0.75;
+      const rect = canvas.getBoundingClientRect();
+      const scale = rect.width > 0 ? canvas.width / rect.width : 1;
+      const handleTol = HANDLE_DISPLAY_SIZE * scale * 0.75;
+      const hitTol = Math.max(6, 10 * scale);
 
+      // A box edit stays editable with the tool that drew it: its handles
+      // resize it and its body moves it, without switching to select.
+      // Other tools keep drawing normally, so a new blur or rect can still
+      // be started over an existing one.
+      const selIsBox =
+        selectedIdx !== null &&
+        selectedIdx < frameEdits.length &&
+        BOX_TOOL_KINDS.includes(frameEdits[selectedIdx].kind as EditTool);
+      if (
+        selIsBox &&
+        (tool === "select" || frameEdits[selectedIdx!].kind === tool)
+      ) {
+        const sel = frameEdits[selectedIdx!];
         // Prefer a handle hit on the currently-selected edit — so a
         // click on a corner always resizes even if the corner happens
         // to sit over another edit.
-        if (selectedIdx !== null && selectedIdx < frameEdits.length) {
-          const sel = frameEdits[selectedIdx];
-          const handle = hitHandle(sel, p.x, p.y, handleTol);
-          if (handle) {
-            canvas.setPointerCapture(evt.pointerId);
-            selectOpRef.current = {
-              kind: handle,
-              original: cloneEditShallow(sel),
-              startPt: p,
-              idx: selectedIdx,
-            };
-            return;
-          }
+        const handle = hitHandle(sel, p.x, p.y, handleTol);
+        if (handle) {
+          canvas.setPointerCapture(evt.pointerId);
+          selectOpRef.current = {
+            kind: handle,
+            original: cloneEditShallow(sel),
+            startPt: p,
+            idx: selectedIdx!,
+          };
+          return;
         }
+        if (tool !== "select" && hitTestEdits([sel], p.x, p.y, hitTol) !== null) {
+          canvas.setPointerCapture(evt.pointerId);
+          selectOpRef.current = {
+            kind: "move",
+            original: cloneEditShallow(sel),
+            startPt: p,
+            idx: selectedIdx!,
+          };
+          return;
+        }
+      }
 
+      if (tool === "select") {
         // Otherwise: hit-test edits top-down. Clicking an edit selects
         // it and starts a move; clicking empty space deselects.
-        const hitTol = Math.max(6, 10 * scale);
         const idx = hitTestEdits(frameEdits, p.x, p.y, hitTol);
         if (idx !== null) {
           setSelectedIdx(idx);
@@ -688,15 +774,12 @@ export default function Zoom({
     setEditingTextIdx(null);
   };
 
-  const handleUndo = () => {
-    if (!current || frameEdits.length === 0) return;
-    onEditsChange(
-      setFrameEdits(edits, current.index, frameEdits.slice(0, -1)),
-    );
-  };
+  const canRedo =
+    !!current && (redoRef.current[current.index]?.length ?? 0) > 0;
 
   const handleClear = () => {
     if (!current) return;
+    clearRedo();
     onEditsChange(setFrameEdits(edits, current.index, []));
   };
 
@@ -757,7 +840,7 @@ export default function Zoom({
     const img = imgRef.current;
     if (!img) return;
     const target = await saveDialog({
-      defaultPath: `frame-${current.index + 1}.png`,
+      defaultPath: `${exportPath}-${pos + 1}.png`,
       filters: [
         { name: "PNG image", extensions: ["png"] },
         { name: "JPEG image", extensions: ["jpg", "jpeg"] },
@@ -785,10 +868,13 @@ export default function Zoom({
       const blob = await offscreen.convertToBlob({ type: mime, quality: 0.92 });
       const bytes = new Uint8Array(await blob.arrayBuffer());
       await writeFile(target, bytes);
+      onSaved(target);
+    } catch (e) {
+      onError(String(e));
     } finally {
       setSaving(false);
     }
-  }, [current, imgSize, frameEdits, inputEvents, spotlight]);
+  }, [current, pos, imgSize, frameEdits, inputEvents, spotlight, exportPath, onSaved, onError]);
 
   const srcUrl = useMemo(
     () => (current ? convertFileSrc(current.path) : ""),
@@ -919,6 +1005,17 @@ export default function Zoom({
   const canPrev = pos > 0;
   const canNext = pos < thumbs.length - 1;
 
+  // The options strip is titled after the selected edit when the Select
+  // tool has one picked, otherwise after the active tool.
+  const optionsTitle =
+    tool === "select" && selectedEdit
+      ? KIND_NAMES[selectedEdit.kind]
+      : TOOL_NAMES[tool];
+  const optionsHint =
+    tool === "select" && selectedEdit
+      ? "Drag to move, drag a handle to resize. Delete removes it."
+      : TOOL_HINTS[tool];
+
   const toolBtn = (key: EditTool, icon: React.ReactNode, title: string) => (
     <button
       type="button"
@@ -934,24 +1031,15 @@ export default function Zoom({
   return (
     <div className="zoom">
       <div className="zoom__bar">
-        <button
-          type="button"
-          className="icon-btn"
-          onClick={onBack}
-          title="Back to frames"
-        >
-          <IconBack size={18} />
-        </button>
-        <span className="zoom__bar__sep" />
         <div className="editor-bar__group">
-          {toolBtn("select", <IconCursor size={18} />, "Select / view")}
-          {toolBtn("rect", <IconRectTool size={18} />, "Rectangle")}
-          {toolBtn("ellipse", <IconCircleTool size={18} />, "Ellipse")}
-          {toolBtn("arrow", <IconArrow size={18} />, "Arrow")}
-          {toolBtn("freehand", <IconPen size={18} />, "Freehand")}
-          {toolBtn("text", <IconText size={18} />, "Text")}
-          {toolBtn("blur", <IconBlur size={18} />, "Blur region")}
-          {toolBtn("simplify", <IconSimplify size={18} />, "Simplify content")}
+          {toolBtn("select", <IconCursor size={18} />, "Select / move (V)")}
+          {toolBtn("rect", <IconRectTool size={18} />, "Rectangle (R)")}
+          {toolBtn("ellipse", <IconCircleTool size={18} />, "Ellipse (E)")}
+          {toolBtn("arrow", <IconArrow size={18} />, "Arrow (A)")}
+          {toolBtn("freehand", <IconPen size={18} />, "Freehand (P)")}
+          {toolBtn("text", <IconText size={18} />, "Text (T)")}
+          {toolBtn("blur", <IconBlur size={18} />, "Blur region (B)")}
+          {toolBtn("simplify", <IconSimplify size={18} />, "Simplify content (S)")}
           <button
             type="button"
             className="editor-tool"
@@ -960,61 +1048,59 @@ export default function Zoom({
           >
             <IconImageAdd size={18} />
           </button>
-          <button
-            type="button"
-            className={`editor-tool ${spotlight.enabled ? "is-active" : ""}`}
-            title="Spotlight — dim outside cursor"
-            onClick={() => onSpotlightChange({ enabled: !spotlight.enabled })}
-          >
-            <IconSpotlight size={18} active={spotlight.enabled} />
-          </button>
         </div>
 
+        {/* Spotlight is an on/off effect for the whole clip, not a drawing
+            tool, so it sits apart as a labeled toggle. */}
+        <button
+          type="button"
+          className={`chip chip--icon ${spotlight.enabled ? "chip--active" : ""} ${
+            spotlightAvailable ? "" : "chip--unavailable"
+          }`}
+          aria-pressed={spotlight.enabled}
+          title={
+            spotlightAvailable
+              ? "Spotlight: dims everything except a circle around the cursor, on every frame of this recording"
+              : "Spotlight needs a recorded cursor, and this clip has none"
+          }
+          onClick={() => onSpotlightChange({ enabled: !spotlight.enabled })}
+        >
+          <IconSpotlight size={14} active={spotlight.enabled} />
+          Spotlight
+        </button>
+
+        {/* Edit-level actions. Frame-level actions (delete, export) live
+            in the bottom bar next to the frame navigation. */}
         <div className="editor-bar__group" style={{ marginLeft: "auto" }}>
-          <span className="zoom__bar__info">
-            <span>Frame {current.index + 1}</span>
-            <span className="muted">/ {thumbs.length}</span>
-            {frameEdits.length > 0 && (
-              <span className="tag tag--edited">
-                {frameEdits.length} edit{frameEdits.length > 1 ? "s" : ""}
-              </span>
-            )}
-          </span>
-          <span className="zoom__bar__sep" />
-          <button type="button" className="icon-btn" onClick={handleUndo} disabled={frameEdits.length === 0} title="Undo (Ctrl+Z)">
+          {frameEdits.length > 0 && (
+            <span className="tag tag--edited">
+              {frameEdits.length} edit{frameEdits.length > 1 ? "s" : ""}
+            </span>
+          )}
+          <button type="button" className="icon-btn" onClick={undo} disabled={frameEdits.length === 0} title="Undo last edit (Ctrl+Z)">
             <IconUndo size={18} />
           </button>
-          <button type="button" className="icon-btn" onClick={handleClear} disabled={frameEdits.length === 0} title="Clear all edits">
+          <button type="button" className="icon-btn" onClick={redo} disabled={!canRedo} title="Redo (Ctrl+Y)">
+            <span style={{ display: "inline-flex", transform: "scaleX(-1)" }}>
+              <IconUndo size={18} />
+            </span>
+          </button>
+          <button type="button" className="icon-btn" onClick={handleClear} disabled={frameEdits.length === 0} title="Clear all edits on this frame">
             <IconTrash size={18} />
           </button>
-          <button type="button" className="icon-btn" onClick={handleApplyToAll} disabled={frameEdits.length === 0} title="Apply to all frames">
+          <button type="button" className="icon-btn" onClick={handleApplyToAll} disabled={frameEdits.length === 0} title="Copy this frame's edits to every frame">
             <IconCopyAll size={18} />
-          </button>
-          <span className="zoom__bar__sep" />
-          <button
-            type="button"
-            className="icon-btn"
-            onClick={() => onDelete(current.index)}
-            title="Delete frame"
-          >
-            <IconTrash size={18} />
-          </button>
-          <span className="zoom__bar__sep" />
-          <button
-            type="button"
-            className={`icon-btn ${saving ? "icon-btn--busy" : ""}`}
-            onClick={saveFrame}
-            disabled={saving}
-            title="Save frame as image"
-          >
-            <IconSave size={18} />
           </button>
           {compactNavButton}
         </div>
       </div>
 
-      {(hasColor || hasThickness || hasStrength || hasSimplify || spotlight.enabled) && (
-        <div className="editor-props">
+      {/* Options strip: always names the active tool (or the selected
+          edit), shows its options, and says how to use it. */}
+      <div className="editor-props">
+          <span className="editor-props__tool" aria-live="polite">
+            {optionsTitle}
+          </span>
           {hasColor && (
             <div className="editor-bar__group">
               {EDIT_PALETTE.map((c, i) => (
@@ -1037,21 +1123,22 @@ export default function Zoom({
           )}
           {hasSimplify && (
             <div className="simplify-sliders">
-              <CompactSlider label="Detail" value={displayedBlock} min={1} max={12} step={1} onChange={(v) => onCompactSliderChange("blockSize", v)} title="Block size in source pixels" />
-              <CompactSlider label="Palette" value={displayedThreshold} min={4} max={50} step={1} onChange={(v) => onCompactSliderChange("threshold", v)} title="Number of distinct colors" />
-              <CompactSlider label="Merge" value={displayedMerge} min={0} max={16} step={1} onChange={(v) => onCompactSliderChange("merge", v)} title="Horizontal merge radius" />
-              <CompactSlider label="Padding" value={displayedPadding} min={0} max={8} step={0.25} onChange={(v) => onCompactSliderChange("padding", v)} title="Bbox padding" />
-              <CompactSlider label="Roundness" value={displayedRoundness} min={0} max={32} step={1} onChange={(v) => onCompactSliderChange("roundness", v)} title="Corner radius" />
+              <CompactSlider label="Block size" value={displayedBlock} min={1} max={12} step={1} onChange={(v) => onCompactSliderChange("blockSize", v)} title="Smaller blocks keep more detail; larger blocks give chunkier shapes" />
+              <CompactSlider label="Colors" value={displayedThreshold} min={4} max={50} step={1} onChange={(v) => onCompactSliderChange("threshold", v)} title="How many distinct colors the shapes use. Higher keeps more color variety" />
+              <CompactSlider label="Join" value={displayedMerge} min={0} max={16} step={1} onChange={(v) => onCompactSliderChange("merge", v)} title="How far apart letters and words can be and still join into one shape" />
+              <CompactSlider label="Padding" value={displayedPadding} min={0} max={8} step={0.25} onChange={(v) => onCompactSliderChange("padding", v)} title="Extra space around each shape" />
+              <CompactSlider label="Roundness" value={displayedRoundness} min={0} max={32} step={1} onChange={(v) => onCompactSliderChange("roundness", v)} title="How rounded each shape's corners are" />
             </div>
           )}
+          <span className="muted editor-props__hint">{optionsHint}</span>
           {spotlight.enabled && (
-            <div className="simplify-sliders">
-              <CompactSlider label="Radius" value={spotlight.radius} min={0} max={200} step={5} onChange={(v) => onSpotlightChange({ radius: v })} title="Spotlight radius in source pixels" />
-              <CompactSlider label="Dim" value={Math.round(spotlight.dimOpacity * 100)} min={0} max={100} step={5} onChange={(v) => onSpotlightChange({ dimOpacity: v / 100 })} title="Darkness outside spotlight (%)" />
+            <div className="editor-props__spotlight">
+              <span className="editor-props__tool">Spotlight</span>
+              <CompactSlider label="Radius" value={spotlight.radius} min={0} max={200} step={5} onChange={(v) => onSpotlightChange({ radius: v })} title="Size of the lit circle around the cursor" />
+              <CompactSlider label="Darkness" value={Math.round(spotlight.dimOpacity * 100)} min={0} max={100} step={5} onChange={(v) => onSpotlightChange({ dimOpacity: v / 100 })} title="How dark everything outside the circle gets (%)" />
             </div>
           )}
-        </div>
-      )}
+      </div>
 
       <div className="zoom__stage" ref={stageRef}>
         <div className="editor-surface" ref={surfaceRef}>
@@ -1136,25 +1223,49 @@ export default function Zoom({
         </div>
       </div>
 
+      {/* Frame bar: everything that acts on the whole frame. */}
       <div className="zoom__controls">
         <button
           type="button"
-          className="icon-btn"
-          disabled={!canPrev}
-          onClick={() => { if (canPrev) { setSelectedIdx(null); onNavigate(thumbs[pos - 1].index); } }}
+          className="btn btn--sm btn--ghost zoom__controls-start"
+          onClick={deleteFrame}
+          title="Delete this frame. You can restore it from the Frames tab"
         >
-          <IconPrev />
+          <IconTrash size={14} />
+          Delete frame
         </button>
-        <div className="muted" style={{ fontVariantNumeric: "tabular-nums" }}>
-          {pos + 1} / {thumbs.length}
+        <div className="zoom__controls-nav">
+          <button
+            type="button"
+            className="icon-btn"
+            disabled={!canPrev}
+            title="Previous frame (←)"
+            onClick={() => { if (canPrev) { setSelectedIdx(null); onNavigate(thumbs[pos - 1].index); } }}
+          >
+            <IconPrev />
+          </button>
+          <div className="muted" style={{ fontVariantNumeric: "tabular-nums" }}>
+            Frame {pos + 1} / {thumbs.length}
+          </div>
+          <button
+            type="button"
+            className="icon-btn"
+            disabled={!canNext}
+            title="Next frame (→)"
+            onClick={() => { if (canNext) { setSelectedIdx(null); onNavigate(thumbs[pos + 1].index); } }}
+          >
+            <IconNext />
+          </button>
         </div>
         <button
           type="button"
-          className="icon-btn"
-          disabled={!canNext}
-          onClick={() => { if (canNext) { setSelectedIdx(null); onNavigate(thumbs[pos + 1].index); } }}
+          className="btn btn--sm zoom__controls-end"
+          onClick={saveFrame}
+          disabled={saving}
+          title="Export this frame as an image"
         >
-          <IconNext />
+          <IconSave size={14} />
+          {saving ? "Exporting…" : "Export frame"}
         </button>
       </div>
     </div>
@@ -1211,6 +1322,59 @@ function cloneEditShallow(e: Edit): Edit {
 // grab zone stays usable regardless of how much the source image is
 // scaled to fit the viewport.
 const HANDLE_DISPLAY_SIZE = 12;
+
+// Tools whose drawn box can be resized/moved while that tool stays active.
+const BOX_TOOL_KINDS: EditTool[] = ["rect", "ellipse", "blur", "simplify"];
+
+// Visible name of the active editor tool, shown at the start of the
+// options strip.
+const TOOL_NAMES: Record<EditTool, string> = {
+  select: "Select / move",
+  rect: "Rectangle",
+  ellipse: "Ellipse",
+  arrow: "Arrow",
+  freehand: "Freehand",
+  text: "Text",
+  blur: "Blur region",
+  simplify: "Simplify content",
+};
+
+// Letter that picks each tool. Keep in step with ShortcutsModal.
+const TOOL_KEYS: Record<string, EditTool> = {
+  v: "select",
+  r: "rect",
+  e: "ellipse",
+  a: "arrow",
+  p: "freehand",
+  t: "text",
+  b: "blur",
+  s: "simplify",
+};
+
+// Name of a selected edit, by kind.
+const KIND_NAMES: Record<Edit["kind"], string> = {
+  rect: "Rectangle",
+  ellipse: "Ellipse",
+  arrow: "Arrow",
+  freehand: "Freehand",
+  text: "Text",
+  blur: "Blur region",
+  simplify: "Simplify content",
+  image: "Image",
+};
+
+// One-line "how do I use this" for each tool, shown in the options strip.
+const TOOL_HINTS: Record<EditTool, string> = {
+  select: "Click an edit to select it. Double-click text to change it.",
+  rect: "Drag to draw. Then drag the box or a corner to adjust it.",
+  ellipse: "Drag to draw. Then drag the shape or a corner to adjust it.",
+  arrow: "Drag from the tail to the tip.",
+  freehand: "Drag to draw freely.",
+  text: "Drag to place a text box, then type.",
+  blur: "Drag over an area to blur it. Then drag the box or a corner to adjust it.",
+  simplify:
+    "Drag over an area to replace its text and details with plain shapes. Content is hidden; the layout stays.",
+};
 
 type SelectHandle = "move" | "nw" | "ne" | "sw" | "se" | "p1" | "p2";
 

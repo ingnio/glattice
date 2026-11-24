@@ -1,7 +1,7 @@
 # Glattice
 
 <p align="center">
-  <img src="public/logo.png" alt="Glattice" width="200" />
+  <img src="src/assets/glattice-logo.png" alt="Glattice" width="200" />
 </p>
 
 A lightweight desktop screen recorder built for bug reports and tutorials. Record your screen, annotate individual frames, then export as an animated GIF, MP4/WebM, or a sprite sheet you can paste directly into a GitHub issue.

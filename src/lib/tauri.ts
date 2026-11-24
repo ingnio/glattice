@@ -29,6 +29,9 @@ export interface RecordingInfo {
    *  recording was off, the device wasn't available, or the capture
    *  silently failed. */
   audioPath: string | null;
+  /** True when the cursor is already drawn into the frames, so the
+   *  captured GIF matches the preview without re-rendering the cursor. */
+  cursorBaked?: boolean;
 }
 
 export interface GifInfo {
@@ -141,6 +144,15 @@ export const api = {
     invoke<void>("start_file_drag", { path }),
   stopRecording: (highQuality: boolean) =>
     invoke<number>("stop_recording", { highQuality }),
+  /** Stop capturing and throw the take away without encoding it. */
+  discardRecording: () => invoke<void>("discard_recording"),
+  /** Shrink the main window into the small always-on-top recording
+   *  strip (`active`, with its content size in logical px), or give it
+   *  back its normal constraints. */
+  setRecordingStrip: (active: boolean, width?: number, height?: number) =>
+    invoke<void>("set_recording_strip", { active, width, height }),
+  /** Open the file manager with `path` selected. */
+  revealInFolder: (path: string) => invoke<void>("reveal_in_folder", { path }),
   /** Fire-and-forget; the decoded GifInfo arrives via `gif-ready`. */
   loadGif: (path: string) => invoke<number>("load_gif", { path }),
   listFrameThumbs: () => invoke<FrameThumb[]>("list_frame_thumbs"),
@@ -182,6 +194,12 @@ export const api = {
       height: r.height,
     }),
   hideRecordingIndicator: () => invoke<void>("hide_recording_indicator"),
+  /** Show the pre-recording countdown on screen (in the region, or in
+   *  the middle of the screen). Call once per tick. */
+  showCountdownIndicator: (seconds: number) =>
+    invoke<void>("show_countdown_indicator", { seconds }),
+  /** Take the on-screen countdown away: on cancel, and before capture. */
+  hideCountdownIndicator: () => invoke<void>("hide_countdown_indicator"),
 };
 
 export interface PrevWindow {

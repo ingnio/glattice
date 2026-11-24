@@ -1,6 +1,7 @@
 import { SheetConfig } from "./tauri";
 import { FrameEdits } from "./edits";
 import { SheetDraft, SpotlightDraft } from "./prefs";
+import { applyTrim, TrimRange } from "./trim";
 
 export type SheetFormat = "png" | "jpeg" | "webp";
 
@@ -20,13 +21,11 @@ export function buildSheetConfig(
   /** All frame indices in display order (may be user-reordered). */
   orderedIndices: number[],
   edits: FrameEdits,
-  trim: { inIdx: number; outIdx: number } | null,
+  trim: TrimRange | null,
   format: SheetFormat = "png",
   spotlight?: SpotlightDraft | null,
 ): SheetConfig {
-  const includedIndices = orderedIndices.filter(
-    (i) => trim === null || (i >= trim.inIdx && i <= trim.outIdx),
-  );
+  const includedIndices = applyTrim(orderedIndices, trim);
   const hasEdits = Object.keys(edits).length > 0;
   return {
     columns: sheet.columnsMode === "auto" ? null : sheet.columns,

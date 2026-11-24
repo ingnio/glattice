@@ -282,6 +282,13 @@ body {
   animation: spin 1s linear infinite;
 }
 
+/* A control that can't do anything for the current clip. It stays
+ * clickable so it can explain why, but reads as switched off. */
+.icon-btn--unavailable,
+.chip--unavailable {
+  opacity: 0.45;
+}
+
 .link-btn {
   background: none;
   border: none;
@@ -365,14 +372,272 @@ body {
   background: color-mix(in srgb, var(--danger) 15%, transparent);
   color: var(--danger);
   border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
-  cursor: pointer;
+}
+
+.banner__text {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .banner__dismiss {
+  flex-shrink: 0;
+  font: inherit;
   font-size: 11px;
-  opacity: 0.7;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+  color: inherit;
+  background: none;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+  opacity: 0.8;
+}
+
+.banner__dismiss:hover {
+  opacity: 1;
+}
+
+/* The compact ⋮ menu button looks the same on every screen: a bordered
+ * circle, matching Home's header buttons. */
+.app .icon-btn.compact-nav-btn {
+  color: var(--text-dim);
+  border-radius: 999px;
+  border-color: var(--border);
+  background: var(--bg-elev);
+}
+
+.app .icon-btn.compact-nav-btn:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+/* ——— recording strip ————————————————————————————————————————————
+ * While a take is running the whole window is this one row: timer,
+ * what is being captured, Discard and Stop. */
+.rec-strip {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 0 12px;
+  background: var(--bg-panel);
+  white-space: nowrap;
+}
+
+.rec-strip__dot {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--danger);
+  animation: rec-strip-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes rec-strip-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.rec-strip__time {
+  font-size: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.rec-strip__meta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11px;
+}
+
+.rec-strip__spacer {
+  flex: 1;
+}
+
+.rec-strip__ask {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rec-strip__dot {
+    animation: none;
+  }
+}
+
+/* ——— export progress ————————————————————————————————————————————
+ * Covers the window while a file is being encoded, in any view. */
+.export-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 950;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  backdrop-filter: blur(2px);
+}
+
+.export-overlay__card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(280px, 100%);
+  padding: 18px 20px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 18px 48px -18px rgba(0, 0, 0, 0.35);
+}
+
+.export-overlay__label {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.export-overlay__bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.export-overlay__fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 120ms linear;
+}
+
+.export-overlay__count {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ——— toast ——————————————————————————————————————————————————————
+ * A short confirmation floating above the bottom edge. Inverted
+ * colours so it reads as separate from the page in either theme. */
+.toast {
+  position: fixed;
+  left: 50%;
+  /* At the top, over the header: the playback, trim and frame controls
+   * all live at the bottom, and a message shouldn't sit on them. */
+  top: 10px;
+  z-index: 900;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  max-width: min(460px, calc(100% - 24px));
+  padding: 6px 6px 6px 12px;
+  border-radius: 18px;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 13px;
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.45);
+  animation: toast-in 160ms ease-out;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -8px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+.toast__icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  color: #fff;
+}
+
+.toast__icon--success {
+  background: var(--success);
+}
+
+.toast__icon--info {
+  background: var(--accent);
+}
+
+/* Short confirmations sit on one line; a longer explanation wraps. */
+.toast__message {
+  min-width: 0;
+  padding: 2px 0;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.toast__action {
+  flex-shrink: 0;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border: none;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg) 18%, transparent);
+  color: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.toast__action:hover {
+  background: color-mix(in srgb, var(--bg) 30%, transparent);
+}
+
+.toast__dismiss {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: inherit;
+  opacity: 0.7;
+  cursor: pointer;
+}
+
+.toast__dismiss:hover {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    animation: none;
+  }
+}
+
+/* Keyboard focus for the Player's scrubber and trim handles. */
+.scrub:focus-visible,
+.scrub__trim-handle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
 }
 
 /* ——— home (mockup layout) ——————————————————————————————— */
@@ -540,6 +805,18 @@ body {
   object-fit: contain;
   user-select: none;
   -webkit-user-drag: none;
+}
+
+/* The logo is navy, which sinks into the dark theme's background.
+ * Lift it there instead of shipping a second image. */
+[data-theme="dark"] .home2__logo-img {
+  filter: brightness(2.1) saturate(0.85);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .home2__logo-img {
+    filter: brightness(2.1) saturate(0.85);
+  }
 }
 
 .home2--compact .home2__logo-img {
@@ -896,6 +1173,114 @@ body {
 .action-card--primary:hover:not(:disabled) {
   filter: brightness(0.96);
   box-shadow: 0 12px 32px -10px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+/* Post-selection panel: a region is set, so offer Record or Reset only. */
+.home2__region-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: stretch;
+  text-align: center;
+}
+
+.home2__region-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.home2__region-title {
+  font-weight: 600;
+}
+
+.home2__region-size {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A wide primary button, not a square card: icon left, label right. */
+.home2__region-record {
+  width: 100%;
+  aspect-ratio: auto;
+  flex-direction: row;
+  justify-content: center;
+  gap: 14px;
+  padding: 16px 18px;
+  text-align: left;
+}
+
+.home2__region-record .action-card__icon {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+}
+
+.home2__region-record-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.home2__region-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* Hotkey reminder under the two action cards. */
+.home2__tip {
+  margin: 0;
+  font-size: 12px;
+  text-align: center;
+}
+
+.home2__tip kbd {
+  font: inherit;
+  font-size: 11px;
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--bg);
+}
+
+.home2--compact .home2__tip {
+  display: none;
+}
+
+.home2--compact .home2__region-record {
+  padding: 8px 10px;
+  gap: 10px;
+}
+
+.home2--compact .home2__region-record .action-card__icon {
+  width: 32px;
+  height: 32px;
+}
+
+/* A region is set: gently pulse the Record card so it reads as the next step. */
+.action-card--ready {
+  animation: action-card-ready 1.8s ease-out infinite;
+}
+
+@keyframes action-card-ready {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 14px transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .action-card--ready {
+    animation: none;
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
 }
 
 .action-card--active {
@@ -1357,6 +1742,71 @@ body {
   opacity: 1;
 }
 
+/* Compact: Recent is a collapsed toggle with denser, single-line rows. */
+.recent__toggle {
+  justify-content: space-between;
+  width: 100%;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.recent__chevron {
+  display: inline-flex;
+  transition: transform 120ms;
+}
+
+.home2--compact .home2__recent {
+  width: 270px;
+  padding: 6px 8px;
+  gap: 4px;
+  border-radius: 12px;
+}
+
+.home2--compact .recent-entry {
+  padding: 3px 4px;
+  gap: 8px;
+}
+
+.home2--compact .recent-entry__thumb {
+  width: 36px;
+  height: 24px;
+}
+
+.home2--compact .recent-entry__body {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.home2--compact .recent-entry__meta {
+  font-size: 11px;
+}
+
+.home2--compact .recent-entry__time {
+  font-size: 10px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Compact rows are one line: name and age only. */
+.home2--compact .recent-entry__details {
+  display: none;
+}
+
+.home2--compact .recent-entry__meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.recent-entry__time {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* ——— end recent recordings ————————————————————————————————————— */
 
 .home__warn {
@@ -1403,6 +1853,39 @@ body {
    * padding-right preserves the original content gutter. */
   margin-right: -20px;
   padding-right: 20px;
+}
+
+.config__group {
+  margin: 14px 0 -4px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted, inherit);
+  opacity: 0.8;
+}
+
+.config__group:first-child {
+  margin-top: 0;
+}
+
+/* A setting that conflicts with another one, with the one-click fix. */
+.config__note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warn) 32%, transparent);
+  font-size: 12px;
+}
+
+.config__note .btn {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .config__section {
@@ -1867,10 +2350,67 @@ body {
   transform: translate(-50%, -50%) scale(1.25);
 }
 
+/* Name of the active tool (or selected edit) at the start of the strip. */
+.editor-props__tool {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* One-line how-to; takes the leftover width, or its own row when tight. */
+.editor-props__hint {
+  flex: 1 1 220px;
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.editor-props .simplify-sliders {
+  flex: 1 1 430px;
+}
+
+/* Spotlight's sliders, labeled so "Radius" isn't read as the shape's. */
+.editor-props__spotlight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-left: 12px;
+  border-left: 1px solid var(--border);
+}
+
+.editor-props__spotlight .compact-slider {
+  flex: 0 0 96px;
+  min-width: 0;
+}
+
+/* A chip with a leading icon. */
+.chip--icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.player__trim {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.player__trim-label {
+  font-size: 11px;
+}
+
+.player__speed-btn {
+  min-width: 44px;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+}
+
 .player__controls {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-wrap: wrap;
   gap: 12px;
   padding: 10px 12px 12px;
   border-top: none;
@@ -2031,8 +2571,10 @@ body {
 }
 
 .countdown-overlay__hint {
+  padding: 0 12px;
   font-size: 12px;
   letter-spacing: 0.06em;
+  text-align: center;
   text-transform: uppercase;
   color: rgba(255, 255, 255, 0.65);
 }
@@ -2080,6 +2622,7 @@ body {
 .player__save-item {
   background: transparent;
   border: none;
+  white-space: nowrap;
   padding: 6px 14px;
   border-radius: 4px;
   text-align: left;
@@ -2466,6 +3009,51 @@ body {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
 }
 
+.shortcuts-modal {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  width: min(380px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.shortcuts-modal__body {
+  padding: 4px 16px 14px;
+  overflow-y: auto;
+}
+
+.shortcuts-modal__group .config__group {
+  margin: 14px 0 4px;
+}
+
+.shortcuts-modal__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+  font-size: 12.5px;
+}
+
+.shortcuts-modal__keys {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.shortcuts-modal kbd {
+  font: inherit;
+  font-size: 11.5px;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--bg-elev);
+}
+
 .frame-props-modal__chrome {
   display: flex;
   align-items: center;
@@ -2523,6 +3111,27 @@ body {
   line-height: 1.6;
 }
 
+/* Frames outside the trim: still here to drag or restore, but not part
+ * of the clip. Only the picture is dimmed so the tag stays readable. */
+.grid-frame--trimmed .grid-frame__canvas,
+.grid-frame--trimmed img {
+  opacity: 0.35;
+}
+
+.grid-frame__trimmed-tag {
+  position: absolute;
+  bottom: 5px;
+  right: 5px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(0, 0, 0, 0.6);
+  padding: 1px 5px;
+  border-radius: 3px;
+  pointer-events: none;
+  z-index: 3;
+  line-height: 1.6;
+}
+
 .grid-frame--excluded {
   opacity: 0.45;
   border-color: color-mix(in srgb, var(--danger) 40%, transparent);
@@ -2533,9 +3142,46 @@ body {
 }
 
 .grid-frame--selected {
-  outline: 2px solid var(--color-accent, #6ea8ff);
-  outline-offset: -2px;
-  border-color: var(--color-accent, #6ea8ff);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent);
+}
+
+/* A tint over the picture, so a selected frame reads at a glance even
+ * when its border is against a busy neighbour. */
+.grid-frame--selected::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--accent);
+  opacity: 0.18;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.grid-view__hints {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.grid-view__hints kbd {
+  font: inherit;
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-elev);
+}
+
+.sheet-bar__label {
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.grid-view__sheet-bar .sheet-view__pos-select {
+  width: auto;
 }
 
 /* ——— zoom ———————————————————————————————————————————————— */
@@ -2553,7 +3199,10 @@ body {
 .zoom__bar {
   display: flex;
   align-items: center;
-  gap: 8px;
+  /* Wrap instead of clipping: in a narrow window the edit actions drop
+   * to a second row rather than sliding out of view. */
+  flex-wrap: wrap;
+  gap: 6px 8px;
   padding: 6px 12px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-panel);
@@ -2582,7 +3231,9 @@ body {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 6px 12px;
+  /* Fixed minimum so the frame below doesn't jump when the tool changes. */
+  min-height: 46px;
   padding: 6px 12px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-panel);
@@ -2851,14 +3502,30 @@ body {
 }
 
 
+/* Frame bar: Delete frame | prev · counter · next | Export frame. */
 .zoom__controls {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: center;
-  gap: 14px;
-  padding: 10px;
+  gap: 10px;
+  padding: 8px 12px;
   border-top: 1px solid var(--border);
   background: var(--bg-panel);
+}
+
+.zoom__controls-nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  white-space: nowrap;
+}
+
+.zoom__controls-start {
+  justify-self: start;
+}
+
+.zoom__controls-end {
+  justify-self: end;
 }
 
 /* ——— save modal ———————————————————————————————————————————————— */

@@ -1,81 +1,98 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
   IconChevron,
+  IconCompact,
   IconConfig,
-  IconMoon,
+  IconExpand,
   IconRecord,
   IconRegion,
-  IconStop,
-  IconSun,
   IconUpload,
   IconX,
 } from "./icons";
 import logoUrl from "./assets/glattice-logo.png";
 import { convertFileSrc, RegionInput } from "./lib/tauri";
-import { HistoryEntry, Theme } from "./lib/prefs";
-import mascotLightUrl from "./assets/mascot.png";
-import mascotDarkUrl from "./assets/mascot-dark.png";
+import { HistoryEntry } from "./lib/prefs";
 
 interface Props {
-  isRecording: boolean;
-  elapsedMs: number;
-  fps: number;
   region: RegionInput | null;
   supported: boolean | null;
   busy: string | null;
-  theme: Theme;
   compact: boolean;
   history: HistoryEntry[];
   onOpenHistory: (path: string) => void;
   onRemoveHistory: (id: number) => void;
   onRecord: () => void;
-  onStop: () => void;
   onSelectRegion: () => void;
-  onSelectRegionHover: () => void;
   onClearRegion: () => void;
   onConfig: () => void;
-  onThemeChange: (t: Theme) => void;
+  onCompactChange: (compact: boolean) => void;
+  /** Natural content height of Home, for sizing the window to fit. */
+  onContentHeight: (height: number, compact: boolean) => void;
+  /** Compact-mode ⋮ menu for getting back to Player / Frames / Editor. */
+  compactNavButton?: React.ReactNode;
   onDropGif: (path: string) => void;
 }
 
 export default function Home({
-  isRecording,
-  elapsedMs,
-  fps,
   region,
   supported,
   busy,
-  theme,
   compact,
   history,
   onOpenHistory,
   onRemoveHistory,
   onRecord,
-  onStop,
   onSelectRegion,
-  onSelectRegionHover,
   onClearRegion,
   onConfig,
-  onThemeChange,
+  onCompactChange,
+  onContentHeight,
+  compactNavButton,
   onDropGif,
 }: Props) {
   const [dragActive, setDragActive] = useState(false);
-  const [themeOpen, setThemeOpen] = useState(false);
+  // Compact mode keeps Recent collapsed until asked for.
+  const [recentOpen, setRecentOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const lastHeightRef = useRef("");
+
+  // The Home window is sized to its content in both layouts, so report
+  // the natural height (children + gaps + padding) whenever it changes.
+  useLayoutEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const cs = getComputedStyle(el);
+    const pad = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+    const gap = parseFloat(cs.rowGap) || 0;
+    const kids = Array.from(el.children) as HTMLElement[];
+    const h = Math.ceil(
+      kids.reduce((sum, k) => sum + k.offsetHeight, 0) +
+        gap * Math.max(0, kids.length - 1) +
+        pad,
+    );
+    // Report which layout the height belongs to, so the window is never
+    // resized with a measurement taken in the other layout.
+    const key = `${compact ? "c" : "f"}:${h}`;
+    if (key !== lastHeightRef.current) {
+      lastHeightRef.current = key;
+      onContentHeight(h, compact);
+    }
+  });
 
   // ESC clears a pending region on the home view so the user can back
   // out of "region selected" without actually starting a recording.
-  // Inert while recording (capture uses its own hotkey to stop) or
-  // when no region is set.
+  // Inert when no region is set. (Home isn't on screen while a take is
+  // running; the recording strip replaces it.)
   useEffect(() => {
-    if (isRecording || !region) return;
+    if (!region) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClearRegion();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [isRecording, region, onClearRegion]);
+  }, [region, onClearRegion]);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -106,7 +123,7 @@ export default function Home({
   };
 
   return (
-    <div className={`home2 ${compact ? "home2--compact" : ""}`}>
+    <div ref={rootRef} className={`home2 ${compact ? "home2--compact" : ""}`}>
       <header className="home2__header">
         <div className="home2__brand">
           <img className="home2__logo-img" src={logoUrl} alt="" aria-hidden="true" />
@@ -121,63 +138,19 @@ export default function Home({
           >
             <IconConfig />
           </button>
-          <div className="theme-toggle">
-            <button
-              type="button"
-              className="theme-toggle__btn"
-              onClick={() => setThemeOpen((o) => !o)}
-              aria-haspopup="true"
-              aria-expanded={themeOpen}
-            >
-              {theme === "dark" ? <IconMoon size={16} /> : <IconSun size={16} />}
-              <span>Theme</span>
-              <IconChevron size={14} />
-            </button>
-            {themeOpen && (
-              <>
-                <div
-                  className="theme-toggle__scrim"
-                  onClick={() => setThemeOpen(false)}
-                />
-                <div className="theme-toggle__menu" role="menu">
-                  {(["light", "dark", "system"] as Theme[]).map((t) => (
-                    <button
-                      key={t}
-                      type="button"
-                      className={`theme-toggle__item ${t === theme ? "theme-toggle__item--active" : ""}`}
-                      onClick={() => {
-                        onThemeChange(t);
-                        setThemeOpen(false);
-                      }}
-                    >
-                      {t.charAt(0).toUpperCase() + t.slice(1)}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={() => onCompactChange(!compact)}
+            aria-pressed={compact}
+            aria-label="Compact layout"
+            title={compact ? "Switch to the full layout" : "Switch to the compact layout"}
+          >
+            {compact ? <IconExpand /> : <IconCompact />}
+          </button>
+          {compactNavButton}
         </div>
       </header>
-
-      {!compact && (
-        <main className="home2__hero">
-          <div className="home2__mascot">
-            <Sparkles />
-            <img
-              className="home2__mascot-img home2__mascot-img--light"
-              src={mascotLightUrl}
-              alt="Glattice mascot"
-            />
-            <img
-              className="home2__mascot-img home2__mascot-img--dark"
-              src={mascotDarkUrl}
-              alt="Glattice mascot"
-              aria-hidden="true"
-            />
-          </div>
-        </main>
-      )}
 
       <section className="home2__card">
         {busy ? (
@@ -185,26 +158,50 @@ export default function Home({
             <div className="home__busy-spinner" />
             <div className="home__busy-text">{busy}</div>
           </div>
-        ) : isRecording ? (
-          <div className="home2__recording">
-            <div className="home__recording">
-              <div className="home__recording-dot" />
-              <div className="home__recording-time">
-                {(elapsedMs / 1000).toFixed(1)}s
-              </div>
-              <div className="home__recording-meta muted">
-                {fps} fps ·{" "}
-                {region ? `${region.width}×${region.height}` : "full display"}
-              </div>
+        ) : region ? (
+          <div className="home2__region-panel">
+            <div className="home2__region-head">
+              <span className="home2__region-title">Region selected</span>
+              <span
+                className="muted home2__region-size"
+                title={`Top-left corner at (${region.x}, ${region.y})`}
+              >
+                {region.width} × {region.height} px
+              </span>
             </div>
             <button
               type="button"
-              className="big-btn big-btn--danger"
-              onClick={onStop}
+              className="action-card action-card--primary action-card--ready home2__region-record"
+              onClick={onRecord}
+              disabled={supported === false}
+              title="Record this region (Ctrl+Shift+R)"
             >
-              <IconStop size={28} />
-              <span>Stop</span>
+              <div className="action-card__icon">
+                <IconRecord size={26} />
+              </div>
+              <div className="home2__region-record-text">
+                <div className="action-card__title">Record region</div>
+                <div className="action-card__subtitle">Ctrl+Shift+R</div>
+              </div>
             </button>
+            <div className="home2__region-actions">
+              <button
+                type="button"
+                className="btn btn--sm"
+                onClick={onSelectRegion}
+                title="Draw a different region"
+              >
+                Change region
+              </button>
+              <button
+                type="button"
+                className="btn btn--sm btn--ghost"
+                onClick={onClearRegion}
+                title="Remove the region and go back to full-screen recording (Esc)"
+              >
+                Reset region
+              </button>
+            </div>
           </div>
         ) : (
           <>
@@ -214,6 +211,7 @@ export default function Home({
                 className="action-card action-card--primary"
                 onClick={onRecord}
                 disabled={supported === false}
+                title="Record the full screen (Ctrl+Shift+R)"
               >
                 <div className="action-card__icon">
                   <IconRecord size={30} />
@@ -223,37 +221,24 @@ export default function Home({
               </button>
               <button
                 type="button"
-                className={`action-card ${region ? "action-card--active" : ""}`}
+                className="action-card"
                 onClick={onSelectRegion}
-                onMouseEnter={onSelectRegionHover}
                 disabled={supported === false}
               >
                 <div className="action-card__icon">
                   <IconRegion size={28} />
                 </div>
-                <div className="action-card__title">
-                  {region ? "Region set" : "Select region"}
-                </div>
+                <div className="action-card__title">Select region</div>
                 <div className="action-card__subtitle">
                   Record just an area
                 </div>
               </button>
             </div>
 
-            {region && (
-              <div className="home__region-info">
-                <span className="muted">
-                  {region.width}×{region.height} @ ({region.x}, {region.y})
-                </span>
-                <button
-                  type="button"
-                  className="link-btn"
-                  onClick={onClearRegion}
-                >
-                  clear
-                </button>
-              </div>
-            )}
+            <p className="home2__tip muted">
+              <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> starts and stops
+              recording from anywhere
+            </p>
 
             <div className="home2__or">
               <span className="home2__or-line" />
@@ -276,21 +261,42 @@ export default function Home({
         )}
       </section>
 
-      {!compact && history.length > 0 && !isRecording && !busy && (
+      {history.length > 0 && !busy && (
         <section className="home2__recent">
-          <div className="recent__header">
-            <span className="recent__title muted">Recent</span>
-          </div>
-          <div className="recent__list">
-            {history.slice(0, 8).map((entry) => (
-              <RecentEntry
-                key={entry.id}
-                entry={entry}
-                onOpen={onOpenHistory}
-                onRemove={onRemoveHistory}
-              />
-            ))}
-          </div>
+          {compact ? (
+            <button
+              type="button"
+              className="recent__header recent__toggle"
+              onClick={() => setRecentOpen((o) => !o)}
+              aria-expanded={recentOpen}
+            >
+              <span className="recent__title muted">
+                Recent · {history.length}
+              </span>
+              <span
+                className="recent__chevron muted"
+                style={{ transform: recentOpen ? "rotate(180deg)" : undefined }}
+              >
+                <IconChevron size={14} />
+              </span>
+            </button>
+          ) : (
+            <div className="recent__header">
+              <span className="recent__title muted">Recent</span>
+            </div>
+          )}
+          {(!compact || recentOpen) && (
+            <div className="recent__list">
+              {history.slice(0, compact ? 5 : 8).map((entry) => (
+                <RecentEntry
+                  key={entry.id}
+                  entry={entry}
+                  onOpen={onOpenHistory}
+                  onRemove={onRemoveHistory}
+                />
+              ))}
+            </div>
+          )}
         </section>
       )}
 
@@ -310,8 +316,8 @@ function relTime(ts: number): string {
   const hours = Math.floor(diff / 3_600_000);
   const days = Math.floor(diff / 86_400_000);
   if (mins < 1) return "Just now";
-  if (mins < 60) return `${mins}m ago`;
-  if (hours < 24) return `${hours}h ago`;
+  if (mins < 60) return `${mins} min ago`;
+  if (hours < 24) return `${hours} hr ago`;
   if (days === 1) return "Yesterday";
   return new Date(ts).toLocaleDateString(undefined, {
     month: "short",
@@ -321,8 +327,14 @@ function relTime(ts: number): string {
 
 function fmtDuration(ms: number): string {
   const s = ms / 1000;
-  if (s < 60) return `${s.toFixed(1)}s`;
-  return `${Math.floor(s / 60)}m ${Math.round(s % 60)}s`;
+  if (s < 60) return `${s.toFixed(1)} sec`;
+  return `${Math.floor(s / 60)} min ${Math.round(s % 60)} sec`;
+}
+
+/** The file's name without its folder or extension, as the row's title. */
+function fileLabel(path: string): string {
+  const name = path.split(/[/\\]/).pop() ?? path;
+  return name.replace(/\.[^.]+$/, "") || name;
 }
 
 function RecentEntry({
@@ -341,7 +353,7 @@ function RecentEntry({
       type="button"
       className="recent-entry"
       onClick={() => onOpen(entry.gifPath)}
-      title={entry.gifPath}
+      title={`${entry.gifPath}\n${entry.width}×${entry.height} pixels`}
     >
       <div className="recent-entry__thumb">
         {!thumbErr && entry.thumbPath ? (
@@ -357,16 +369,19 @@ function RecentEntry({
         )}
       </div>
       <div className="recent-entry__body">
-        <div className="recent-entry__meta">
-          {entry.width}×{entry.height} · {entry.frameCount}f ·{" "}
-          {fmtDuration(entry.durationMs)}
+        <div className="recent-entry__meta">{fileLabel(entry.gifPath)}</div>
+        <div className="recent-entry__time muted">
+          <span className="recent-entry__details">
+            {entry.frameCount} {entry.frameCount === 1 ? "frame" : "frames"} ·{" "}
+            {fmtDuration(entry.durationMs)} ·{" "}
+          </span>
+          {relTime(entry.createdAt)}
         </div>
-        <div className="recent-entry__time muted">{relTime(entry.createdAt)}</div>
       </div>
       <button
         type="button"
         className="recent-entry__remove icon-btn icon-btn--xs"
-        title="Remove from history"
+        title="Remove from list (keeps the GIF file)"
         onClick={(e) => {
           e.stopPropagation();
           onRemove(entry.id);
@@ -378,20 +393,3 @@ function RecentEntry({
   );
 }
 
-function Sparkles() {
-  return (
-    <svg className="home2__sparkles" viewBox="0 0 200 120" aria-hidden="true">
-      {[
-        { x: 18, y: 28, s: 8 },
-        { x: 180, y: 24, s: 10 },
-        { x: 30, y: 95, s: 6 },
-        { x: 176, y: 92, s: 8 },
-      ].map((p, i) => (
-        <path
-          key={i}
-          d={`M${p.x} ${p.y - p.s} L${p.x + p.s / 3} ${p.y - p.s / 3} L${p.x + p.s} ${p.y} L${p.x + p.s / 3} ${p.y + p.s / 3} L${p.x} ${p.y + p.s} L${p.x - p.s / 3} ${p.y + p.s / 3} L${p.x - p.s} ${p.y} L${p.x - p.s / 3} ${p.y - p.s / 3} Z`}
-        />
-      ))}
-    </svg>
-  );
-}

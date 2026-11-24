@@ -6,7 +6,9 @@ import { api, convertFileSrc, SheetConfig, SheetInfo } from "./lib/tauri";
 import { FrameEdits } from "./lib/edits";
 import { SheetDraft, SpotlightDraft } from "./lib/prefs";
 import { buildSheetConfig, SheetFormat } from "./lib/sheetConfig";
+import { TrimRange } from "./lib/trim";
 import { IconSave, IconX } from "./icons";
+import ErrorBanner from "./ErrorBanner";
 
 async function composeOnce(config: SheetConfig): Promise<SheetInfo> {
   const ready = new Promise<SheetInfo>((resolve, reject) => {
@@ -24,9 +26,12 @@ interface Props {
   sheet: SheetDraft;
   frameOrder: number[];
   edits: FrameEdits;
-  trim: { inIdx: number; outIdx: number } | null;
+  trim: TrimRange | null;
   spotlight: SpotlightDraft;
-  defaultDir: string | null;
+  /** Suggested save location and name, e.g. `…/recording-…-sheet.png`. */
+  defaultPath: string;
+  /** Called with the saved file's path once the sheet is written. */
+  onSaved: (path: string) => void;
   onClose: () => void;
 }
 
@@ -36,7 +41,8 @@ export default function SheetPreviewModal({
   edits,
   trim,
   spotlight,
-  defaultDir,
+  defaultPath,
+  onSaved,
   onClose,
 }: Props) {
   const [preview, setPreview] = useState<SheetInfo | null>(null);
@@ -55,9 +61,7 @@ export default function SheetPreviewModal({
 
   const save = useCallback(async () => {
     const target = await saveDialog({
-      defaultPath: defaultDir
-        ? `${defaultDir.replace(/[/\\]+$/, "")}/sprite-sheet.png`
-        : "sprite-sheet.png",
+      defaultPath,
       filters: [
         { name: "PNG image", extensions: ["png"] },
         { name: "JPEG image", extensions: ["jpg", "jpeg"] },
@@ -76,27 +80,31 @@ export default function SheetPreviewModal({
           ? preview
           : await composeOnce(buildSheetConfig(sheet, frameOrder, edits, trim, format, spotlight));
       await copyFile(source.path, target);
+      // Done: confirm where it went and get out of the way.
+      onSaved(target);
+      onClose();
     } catch (e) {
       setError(String(e));
     } finally {
       setBusy(null);
     }
-  }, [defaultDir, preview, sheet, frameOrder, edits, trim, spotlight]);
+  }, [defaultPath, preview, sheet, frameOrder, edits, trim, spotlight, onSaved, onClose]);
 
   return (
     <div className="modal-scrim" onClick={onClose}>
       <div className="sheet-modal" onClick={(e) => e.stopPropagation()}>
         <div className="sheet-modal__chrome">
-          <span className="sheet-modal__title">Preview</span>
+          <span className="sheet-modal__title">Sprite sheet preview</span>
           <div className="sheet-modal__actions">
             <button
               type="button"
-              className={`icon-btn ${busy ? "icon-btn--busy" : ""}`}
+              className="btn btn--sm btn--primary"
               onClick={save}
               disabled={!preview || !!busy}
-              title={busy ?? "Save sprite sheet"}
+              title={busy ?? "Save the sprite sheet as an image"}
             >
-              <IconSave />
+              <IconSave size={16} />
+              Save
             </button>
             <button type="button" className="icon-btn" onClick={onClose} title="Close">
               <IconX size={18} />
@@ -105,10 +113,7 @@ export default function SheetPreviewModal({
         </div>
 
         {error && (
-          <div className="banner banner--error" onClick={() => setError(null)}>
-            {error}
-            <span className="banner__dismiss">dismiss</span>
-          </div>
+          <ErrorBanner error={error} onDismiss={() => setError(null)} />
         )}
 
         <div className="sheet-modal__body">

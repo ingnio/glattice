@@ -7,6 +7,7 @@ mod error;
 mod font;
 mod gif_codec;
 mod input;
+mod overlays;
 mod rect_detect;
 mod sprite;
 mod thumbs;
@@ -55,6 +56,15 @@ pub struct AppState {
     /// hover pre-capture eliminates the slow screenshot phase on click.
     pub overlay_bg_captured_at: parking_lot::Mutex<Option<std::time::Instant>>,
     pub precapture_monitor_idx: parking_lot::Mutex<Option<usize>>,
+    /// True while the main window is shrunk to the small always-on-top
+    /// recording strip. The indicator watchdog then keeps the strip above
+    /// the indicator's dim overlay so Stop is never darkened.
+    pub strip_active: std::sync::atomic::AtomicBool,
+    /// Where the main window sat before it became the recording strip.
+    /// The strip can be dragged out of the way mid-take; afterwards the
+    /// full window goes back to where it was instead of growing from
+    /// wherever the strip ended up (possibly half off-screen).
+    pub strip_prev_pos: parking_lot::Mutex<Option<tauri::PhysicalPosition<i32>>>,
 }
 
 #[derive(Clone, Copy, Serialize)]
@@ -85,6 +95,8 @@ impl AppState {
             monitor_index: parking_lot::Mutex::new(None),
             overlay_bg_captured_at: parking_lot::Mutex::new(None),
             precapture_monitor_idx: parking_lot::Mutex::new(None),
+            strip_active: std::sync::atomic::AtomicBool::new(false),
+            strip_prev_pos: parking_lot::Mutex::new(None),
         }
     }
 
@@ -136,6 +148,9 @@ struct RecordingInfo {
     /// session was started with audio recording enabled. `None` when
     /// audio was disabled or capture failed silently.
     audio_path: Option<String>,
+    /// True when the cursor is already drawn into the frames, so the
+    /// saved GIF matches the preview without re-rendering the cursor.
+    cursor_baked: bool,
 }
 
 #[derive(Clone, Serialize)]
@@ -465,6 +480,7 @@ fn stop_recording(
             let height = first.height;
             let frame_count = recording.frames.len() as u32;
             let fps = recording.fps;
+            let cursor_baked = recording.cursor_baked;
             let duration_ms = recording
                 .frames
                 .last()
@@ -543,6 +559,7 @@ fn stop_recording(
                 duration_ms,
                 source_id: id,
                 audio_path,
+                cursor_baked,
             })
         })();
 
@@ -566,6 +583,26 @@ fn stop_recording(
         t0.elapsed()
     );
     Ok(id)
+}
+
+/// Stop capture and throw the take away: no encode, no thumbnails, no
+/// history entry. Used by the recording strip's Discard button.
+#[tauri::command]
+fn discard_recording(state: State<'_, AppState>) -> AppResult<()> {
+    dlog!("[discard_recording] begin");
+    match state.capture.stop() {
+        Ok(recording) => {
+            dlog!(
+                "[discard_recording] dropped {} frames",
+                recording.frames.len()
+            );
+            Ok(())
+        }
+        // Nothing captured yet, or no session at all: either way there
+        // is nothing left to throw away.
+        Err(AppError::NoFrames) | Err(AppError::NotRecording) => Ok(()),
+        Err(e) => Err(e),
+    }
 }
 
 /// Fire-and-forget GIF decode. Returns the allocated source id
@@ -715,6 +752,7 @@ fn generate_sprite_sheet(
             input_events: rec.input_events.clone(),
             // Sprite sheets never need audio — clone leaves it out.
             audio: None,
+            cursor_baked: rec.cursor_baked,
         }
     };
 
@@ -883,10 +921,10 @@ fn enter_region_overlay(app: tauri::AppHandle) -> AppResult<()> {
                 .overlay_bg_captured_at
                 .lock()
                 .map(|t| t.elapsed());
-            let use_cache = cache_age
-                .as_ref()
-                .map(|d| *d < std::time::Duration::from_secs(15))
-                .unwrap_or(false);
+            // The hover pre-capture would include Glattice's own window
+            // (the user is hovering its button), so always take a fresh
+            // backdrop taken after Glattice has been hidden.
+            let use_cache = false;
 
             let monitor_idx = if use_cache {
                 dlog!("[enter_region_overlay bg] using pre-captured backdrop (age {:?})", cache_age.unwrap());
@@ -915,9 +953,12 @@ fn enter_region_overlay(app: tauri::AppHandle) -> AppResult<()> {
                         Some(visible)
                     })
                     .unwrap_or(false);
-                std::thread::sleep(std::time::Duration::from_millis(
-                    if indicator_was_visible { 120 } else { 60 },
-                ));
+                // Hide Glattice so the backdrop is the bare desktop.
+                // It is shown again as the overlay below.
+                if let Some(main) = app_bg.get_webview_window("main") {
+                    let _ = main.hide();
+                }
+                std::thread::sleep(std::time::Duration::from_millis(200));
 
                 let monitor = capture::pick_monitor(monitor_idx)?;
                 let shot = monitor
@@ -1116,6 +1157,8 @@ fn leave_region_overlay(app: tauri::AppHandle, prev: PrevWindow) -> AppResult<()
         .map_err(|e| AppError::Other(format!("set_size: {e}")))?;
     win.set_position(tauri::PhysicalPosition::new(prev.prev_x, prev.prev_y))
         .map_err(|e| AppError::Other(format!("set_position: {e}")))?;
+    // Take keyboard focus back so Esc (clear region) works on Home.
+    let _ = win.set_focus();
     Ok(())
 }
 
@@ -1424,6 +1467,100 @@ fn show_recording_indicator(
     Ok(())
 }
 
+/// Stretch the indicator window over the whole of monitor
+/// `monitor_idx`, shown, on top and click-through. Returns the window
+/// and the monitor's scale factor.
+fn cover_monitor_with_indicator(
+    app: &tauri::AppHandle,
+    monitor_idx: Option<usize>,
+) -> AppResult<(tauri::WebviewWindow, f32)> {
+    let win = app
+        .get_webview_window("indicator")
+        .ok_or_else(|| AppError::Other("indicator window missing".into()))?;
+
+    let (mw, mh, mx, my, scale) = capture::monitor_geometry(monitor_idx)?;
+    let scale_f = if scale > 0.0 { scale } else { 1.0 };
+    let scale = scale_f as f64;
+
+    win.set_size(tauri::LogicalSize::new(mw as f64 / scale, mh as f64 / scale))
+        .map_err(|e| AppError::Other(format!("indicator set_size: {e}")))?;
+    win.set_position(tauri::LogicalPosition::new(
+        mx as f64 / scale,
+        my as f64 / scale,
+    ))
+    .map_err(|e| AppError::Other(format!("indicator set_position: {e}")))?;
+    win.show()
+        .map_err(|e| AppError::Other(format!("indicator show: {e}")))?;
+    let _ = win.set_always_on_top(true);
+    let _ = win.set_ignore_cursor_events(true);
+    Ok((win, scale_f))
+}
+
+/// Show the pre-recording countdown on screen, where the user is
+/// actually looking: centred in the selected region (with the region
+/// outlined, so it's clear what is about to be recorded), or in the
+/// middle of the screen for a full-screen take. Called once per tick
+/// with the number of seconds left.
+#[tauri::command]
+fn show_countdown_indicator(
+    app: tauri::AppHandle,
+    seconds: u32,
+    state: State<'_, AppState>,
+) -> AppResult<()> {
+    let region = *state.region.lock();
+    // A region belongs to the monitor it was picked on. A full-screen
+    // take records whichever monitor the cursor is on when it starts
+    // (see `start_recording`), so the countdown previews that one.
+    let monitor_idx = if region.is_some() {
+        *state.monitor_index.lock()
+    } else {
+        capture::cursor_monitor()
+            .ok()
+            .flatten()
+            .or_else(|| *state.monitor_index.lock())
+    };
+    let (win, scale) = cover_monitor_with_indicator(&app, monitor_idx)?;
+
+    let ir = region.map(|r| IndicatorRegion {
+        x: r.x as i32,
+        y: r.y as i32,
+        width: r.width,
+        height: r.height,
+        scale,
+    });
+    *state.indicator_region.lock() = ir;
+    // Region first: the indicator drops any countdown when its region
+    // changes, then the number lands on top of the new state.
+    let _ = win.emit("indicator-region", ir);
+    let _ = win.emit("indicator-countdown", seconds);
+
+    state
+        .indicator_visible
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    raise_indicator_now(&app);
+    Ok(())
+}
+
+/// Take the countdown, and the indicator with it, off the screen.
+/// Called when the countdown is cancelled, and right before capture
+/// starts so the number can't end up in the first frame.
+#[tauri::command]
+fn hide_countdown_indicator(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> AppResult<()> {
+    *state.indicator_region.lock() = None;
+    state
+        .indicator_visible
+        .store(false, std::sync::atomic::Ordering::SeqCst);
+    if let Some(win) = app.get_webview_window("indicator") {
+        let _ = win.emit("indicator-countdown", Option::<u32>::None);
+        win.hide()
+            .map_err(|e| AppError::Other(format!("indicator hide: {e}")))?;
+    }
+    Ok(())
+}
+
 /// Re-raise the indicator window within the Windows topmost group
 /// so other always-on-top windows don't obscure it. No-op on other
 /// platforms — the layering behaviour doesn't have the same issue.
@@ -1432,17 +1569,40 @@ fn raise_indicator_now(app: &tauri::AppHandle) {
     use windows::Win32::UI::WindowsAndMessaging::{
         SetWindowPos, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
     };
+    let flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE;
+
+    // While the recording strip is up it has to stay above the
+    // indicator: the indicator dims the whole screen outside the region
+    // and would otherwise darken the Stop button. So raise the strip to
+    // the very top first, then slot the indicator in directly beneath
+    // it. Doing it in this order means the indicator never covers the
+    // strip, not even for a frame.
+    let strip_hwnd = if app
+        .state::<AppState>()
+        .strip_active
+        .load(std::sync::atomic::Ordering::SeqCst)
+    {
+        app.get_webview_window("main").and_then(|w| w.hwnd().ok())
+    } else {
+        None
+    };
+    if let Some(main_hwnd) = strip_hwnd {
+        unsafe {
+            let _ = SetWindowPos(main_hwnd, Some(HWND_TOPMOST), 0, 0, 0, 0, flags);
+        }
+    }
+
     if let Some(win) = app.get_webview_window("indicator") {
         if let Ok(hwnd) = win.hwnd() {
             unsafe {
                 let _ = SetWindowPos(
                     hwnd,
-                    Some(HWND_TOPMOST),
+                    Some(strip_hwnd.unwrap_or(HWND_TOPMOST)),
                     0,
                     0,
                     0,
                     0,
-                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+                    flags,
                 );
             }
         }
@@ -1586,6 +1746,108 @@ fn show_main_window(app: tauri::AppHandle) -> AppResult<()> {
     Ok(())
 }
 
+/// Minimum inner size of the main window as configured in
+/// tauri.conf.json, restored when the recording strip goes away.
+fn main_min_size(app: &tauri::AppHandle) -> (f64, f64) {
+    app.config()
+        .app
+        .windows
+        .iter()
+        .find(|w| w.label == "main")
+        .map(|w| (w.min_width.unwrap_or(280.0), w.min_height.unwrap_or(220.0)))
+        .unwrap_or((280.0, 220.0))
+}
+
+/// Turn the main window into the small always-on-top recording strip
+/// (`active = true`, sized `width` × `height` logical px), or back into
+/// a normal window. Leaving strip mode only restores the constraints;
+/// the frontend then sizes the window for whichever view it shows.
+///
+/// Runs off the main thread (like the region-overlay worker) because it
+/// reads the window's position, which waits on the event loop.
+#[tauri::command(async)]
+fn set_recording_strip(
+    app: tauri::AppHandle,
+    active: bool,
+    width: Option<f64>,
+    height: Option<f64>,
+    state: State<'_, AppState>,
+) -> AppResult<()> {
+    dlog!("[set_recording_strip] active={active} size={width:?}x{height:?}");
+    let win = app
+        .get_webview_window("main")
+        .ok_or_else(|| AppError::Other("main window missing".into()))?;
+    state
+        .strip_active
+        .store(active, std::sync::atomic::Ordering::SeqCst);
+
+    if active {
+        let w = width.unwrap_or(380.0).max(200.0);
+        let h = height.unwrap_or(56.0).max(40.0);
+        *state.strip_prev_pos.lock() = win.outer_position().ok();
+        // The strip is shorter than the window's normal minimum, so the
+        // floor has to drop before the window can shrink to it.
+        let _ = win.set_min_size(Some(tauri::LogicalSize::new(w.min(280.0), h)));
+        let _ = win.set_size(tauri::LogicalSize::new(w, h));
+        let _ = win.set_always_on_top(true);
+        // Put the strip above the indicator's dim overlay right away
+        // instead of waiting for the watchdog's next tick.
+        if state
+            .indicator_visible
+            .load(std::sync::atomic::Ordering::SeqCst)
+        {
+            raise_indicator_now(&app);
+        }
+    } else {
+        let _ = win.set_always_on_top(false);
+        if let Some(pos) = state.strip_prev_pos.lock().take() {
+            let _ = win.set_position(pos);
+        }
+        let (min_w, min_h) = main_min_size(&app);
+        let _ = win.set_min_size(Some(tauri::LogicalSize::new(min_w, min_h)));
+    }
+    Ok(())
+}
+
+/// Open the system file manager with `path` selected (or just its
+/// folder, where the platform can't select a file).
+#[tauri::command]
+fn reveal_in_folder(path: String) -> AppResult<()> {
+    let p = PathBuf::from(&path);
+    if !p.exists() {
+        return Err(AppError::Other(format!("file not found: {path}")));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        // Explorer only understands backslashes, and it parses its own
+        // command line, so the argument is passed verbatim with the
+        // path quoted. A quote can't appear in a Windows file name;
+        // refusing one keeps the argument from being split.
+        let native = path.replace('/', "\\");
+        if native.contains('"') {
+            return Err(AppError::Other("invalid path".into()));
+        }
+        std::process::Command::new("explorer.exe")
+            .raw_arg(format!("/select,\"{native}\""))
+            .spawn()?;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open").arg("-R").arg(&p).spawn()?;
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let dir = p.parent().unwrap_or(&p);
+        std::process::Command::new("xdg-open").arg(dir).spawn()?;
+    }
+
+    Ok(())
+}
+
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let show = MenuItem::with_id(app, "show", "Show Glattice", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
@@ -1710,6 +1972,9 @@ pub fn run() {
             is_recording,
             start_recording,
             stop_recording,
+            discard_recording,
+            set_recording_strip,
+            reveal_in_folder,
             load_gif,
             generate_sprite_sheet,
             get_region,
@@ -1731,6 +1996,8 @@ pub fn run() {
             get_overlay_background,
             show_recording_indicator,
             hide_recording_indicator,
+            show_countdown_indicator,
+            hide_countdown_indicator,
             get_indicator_region,
             take_pending_file,
         ])

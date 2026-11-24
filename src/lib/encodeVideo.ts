@@ -15,15 +15,16 @@ import {
 } from "mediabunny";
 
 import { convertFileSrc, FrameThumb, InputEvent } from "./tauri";
-import { FrameEdits, getFrameEdits } from "./edits";
+import { FrameEdits } from "./edits";
 import { SpotlightDraft } from "./prefs";
-import { drawClicks, drawCursor, drawKeys, drawSpotlight, paintEdit } from "./paintEdits";
+import { loadEditImages, loadFrameBitmap, paintFrame } from "./renderFrame";
+import { applyTrim, TrimRange } from "./trim";
 
 export type VideoFormat = "mp4" | "webm";
 
 export interface EncodeOptions {
   thumbs: FrameThumb[];
-  trim: { inIdx: number; outIdx: number } | null;
+  trim: TrimRange | null;
   edits: FrameEdits;
   inputEvents: InputEvent[];
   fps: number;
@@ -46,9 +47,7 @@ export async function encodeVideo(opts: EncodeOptions): Promise<Uint8Array> {
   const { thumbs, trim, edits, inputEvents, fps, format, audioPath, spotlight, frameDelays } =
     opts;
 
-  const playable = thumbs.filter(
-    (t) => trim === null || (t.index >= trim.inIdx && t.index <= trim.outIdx),
-  );
+  const playable = applyTrim(thumbs, trim);
   if (playable.length === 0) {
     throw new Error("Nothing to encode — no frames in the current selection.");
   }
@@ -57,33 +56,14 @@ export async function encodeVideo(opts: EncodeOptions): Promise<Uint8Array> {
   // synchronous w.r.t. paint and we hit no decode latency between
   // VideoEncoder.encode() calls.
   const bitmaps: ImageBitmap[] = await Promise.all(
-    playable.map(async (t) => {
-      const res = await fetch(convertFileSrc(t.path));
-      const blob = await res.blob();
-      return await createImageBitmap(blob);
-    }),
+    playable.map((t) => loadFrameBitmap(t)),
   );
 
   const width = bitmaps[0].width;
   const height = bitmaps[0].height;
 
-  // Pre-load any image edits so paintEdit can draw them synchronously.
-  const imageCache = new Map<string, HTMLImageElement>();
-  {
-    const srcs = new Set<string>();
-    for (const t of playable) {
-      for (const e of getFrameEdits(edits, t.index)) {
-        if (e.kind === "image") srcs.add(e.src);
-      }
-    }
-    await Promise.all([...srcs].map(src => new Promise<void>(resolve => {
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-      img.onload = () => { imageCache.set(src, img); resolve(); };
-      img.onerror = () => resolve();
-      img.src = src;
-    })));
-  }
+  // Pre-load any image edits so they can be drawn synchronously.
+  const imageCache = await loadEditImages(playable, edits);
 
   // Even dimensions are required by some codecs (notably H.264). Round
   // up to the nearest pair so cropping doesn't lose content.
@@ -172,6 +152,7 @@ export async function encodeVideo(opts: EncodeOptions): Promise<Uint8Array> {
   // are shifted so the first playable frame lands at 0 — keeps audio
   // and video aligned when the user has trimmed the start off.
   const total = playable.length;
+  let timelineSec = 0;
   for (let i = 0; i < total; i++) {
     const t = playable[i];
     const bm = bitmaps[i];
@@ -180,53 +161,30 @@ export async function encodeVideo(opts: EncodeOptions): Promise<Uint8Array> {
       ctx.fillStyle = "#000";
       ctx.fillRect(0, 0, out_w, out_h);
     }
-    ctx.drawImage(bm, 0, 0, width, height);
+    // Same paint pipeline as the Player and the GIF export.
+    paintFrame(ctx as unknown as CanvasRenderingContext2D, bm, t, width, height, {
+      edits,
+      inputEvents,
+      spotlight,
+      imageCache,
+    });
 
-    const frameEdits = getFrameEdits(edits, t.index);
-    for (const e of frameEdits) paintEdit(ctx as unknown as CanvasRenderingContext2D, bm, e, { imageCache });
-    if (t.cursor) {
-      drawCursor(
-        ctx as unknown as CanvasRenderingContext2D,
-        t.cursor.x,
-        t.cursor.y,
-      );
-    }
-    if (inputEvents.length > 0) {
-      drawClicks(
-        ctx as unknown as CanvasRenderingContext2D,
-        inputEvents,
-        t.elapsedMs,
-        width,
-        height,
-      );
-      drawKeys(
-        ctx as unknown as CanvasRenderingContext2D,
-        inputEvents,
-        t.elapsedMs,
-        width,
-        height,
-      );
-    }
-    if (spotlight?.enabled && t.cursor) {
-      drawSpotlight(
-        ctx as unknown as CanvasRenderingContext2D,
-        t.cursor.x,
-        t.cursor.y,
-        spotlight.radius,
-        spotlight.dimOpacity,
-      );
-    }
-
-    const timestampSec = (t.elapsedMs - baseElapsedMs) / 1000;
-    // Natural duration: distance to the next playable frame, or 1/fps
-    // for the last one. Add any per-frame hold time on top.
+    // Natural duration: the captured gap to the next frame when that
+    // frame is still its neighbour from the recording, otherwise one
+    // frame at `fps` (the last frame, or a spot where frames were
+    // deleted, inserted or dragged — capture times say nothing about
+    // how long a frame should show next to its new neighbour). Add any
+    // per-frame hold time on top.
     const next = playable[i + 1];
-    const naturalSec = next
-      ? Math.max(0.001, (next.elapsedMs - t.elapsedMs) / 1000)
-      : 1 / fps;
+    const gapMs =
+      next && next.index === t.index + 1 ? next.elapsedMs - t.elapsedMs : 0;
+    const naturalSec = gapMs > 0 ? gapMs / 1000 : 1 / fps;
     const holdSec = (frameDelays?.[t.index] ?? 0) / 1000;
     const durationSec = naturalSec + holdSec;
-    await source.add(timestampSec, durationSec);
+    // Timestamps run along the output timeline, not the capture clock,
+    // so they always increase even after frames are reordered.
+    await source.add(timelineSec, durationSec);
+    timelineSec += durationSec;
 
     opts.onProgress?.(i + 1, total);
   }

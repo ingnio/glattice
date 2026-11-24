@@ -9,6 +9,7 @@ import { AnnotationPos, SheetDraft, SpotlightDraft } from "./lib/prefs";
 // SheetView is superseded by SheetPreviewModal + Grid sheet toolbar.
 // Kept for reference; no longer rendered.
 import { buildSheetConfig, SheetFormat } from "./lib/sheetConfig";
+import { TrimRange } from "./lib/trim";
 import { IconSave } from "./icons";
 
 interface Props {
@@ -19,7 +20,7 @@ interface Props {
   edits: FrameEdits;
   /** Player in/out trim (inclusive original frame indices). Frames
    *  outside the range are excluded from the sheet. */
-  trim: { inIdx: number; outIdx: number } | null;
+  trim: TrimRange | null;
   spotlight: SpotlightDraft;
   defaultDir: string | null;
   /** Lifts the latest composed preview up to App so the window sizer

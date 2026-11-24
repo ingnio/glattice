@@ -18,11 +18,24 @@ export default function RecordingIndicator() {
   // main window is mid-resize. Independent of the recording marquee —
   // when prep is true we render the card and ignore region.
   const [prep, setPrep] = useState<boolean>(false);
+  // Seconds left before recording starts, shown as a big number where
+  // the user is looking: the middle of the region, or of the screen for
+  // a full-screen take. `null` when no countdown is running.
+  const [countdown, setCountdown] = useState<number | null>(null);
 
   useEffect(() => {
     const win = getCurrentWindow();
     win.setIgnoreCursorEvents(true).catch(() => {});
   }, []);
+
+  // A number is only ever valid for its own second. If the next tick (or
+  // the hide) never arrives, drop it rather than risk a stale countdown
+  // sitting inside a region that is about to be recorded.
+  useEffect(() => {
+    if (countdown === null) return;
+    const handle = window.setTimeout(() => setCountdown(null), 1600);
+    return () => window.clearTimeout(handle);
+  }, [countdown]);
 
   useEffect(() => {
     // Pull the current region from Rust state on mount — handles the
@@ -36,21 +49,34 @@ export default function RecordingIndicator() {
 
     let unlistenRegion: (() => void) | undefined;
     let unlistenPrep: (() => void) | undefined;
-    listen<RegionPayload>("indicator-region", (event) => {
+    let unlistenCountdown: (() => void) | undefined;
+    // Any change of region or mode clears the countdown; a countdown
+    // tick always follows the region it belongs to.
+    listen<RegionPayload | null>("indicator-region", (event) => {
       setRegion(event.payload);
       setPrep(false);
+      setCountdown(null);
     }).then((fn) => {
       unlistenRegion = fn;
     });
     listen<boolean>("indicator-prep", (event) => {
       setPrep(event.payload);
-      if (event.payload) setRegion(null);
+      if (event.payload) {
+        setRegion(null);
+        setCountdown(null);
+      }
     }).then((fn) => {
       unlistenPrep = fn;
+    });
+    listen<number | null>("indicator-countdown", (event) => {
+      setCountdown(event.payload);
+    }).then((fn) => {
+      unlistenCountdown = fn;
     });
     return () => {
       unlistenRegion?.();
       unlistenPrep?.();
+      unlistenCountdown?.();
     };
   }, []);
 
@@ -67,7 +93,25 @@ export default function RecordingIndicator() {
     );
   }
 
-  if (!region) return null;
+  // The countdown card. Centred on the region when there is one,
+  // otherwise on the screen (the CSS default).
+  const countdownCard = (center?: { x: number; y: number }) =>
+    countdown === null ? null : (
+      <div
+        className="indicator-countdown"
+        style={center ? { left: `${center.x}px`, top: `${center.y}px` } : undefined}
+        role="status"
+        aria-live="polite"
+        aria-label={`Recording starts in ${countdown}`}
+      >
+        <div className="indicator-countdown__number" key={countdown}>
+          {countdown}
+        </div>
+        <div className="indicator-countdown__hint">Ctrl+Shift+R to cancel</div>
+      </div>
+    );
+
+  if (!region) return countdownCard();
 
   const dpr = window.devicePixelRatio || region.scale || 1;
   const x = region.x / dpr;
@@ -80,6 +124,7 @@ export default function RecordingIndicator() {
 
   return (
     <>
+      {countdownCard({ x: x + w / 2, y: y + h / 2 })}
       <div
         className="indicator-hole"
         style={{

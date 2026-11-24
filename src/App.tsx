@@ -10,6 +10,10 @@ import Player from "./Player";
 import Grid from "./Grid";
 import Zoom from "./Zoom";
 import SheetPreviewModal from "./SheetPreviewModal";
+import ErrorBanner from "./ErrorBanner";
+import RecordingStrip from "./RecordingStrip";
+import Toast from "./Toast";
+import ShortcutsModal from "./ShortcutsModal";
 import {
   api,
   FrameThumb,
@@ -21,6 +25,8 @@ import {
 } from "./lib/tauri";
 
 import { encodeVideo, VideoFormat } from "./lib/encodeVideo";
+import { encodeGif } from "./lib/encodeGif";
+import { remapTrim, TrimRange } from "./lib/trim";
 import { FrameEdits } from "./lib/edits";
 import {
   addHistoryEntry,
@@ -34,7 +40,6 @@ import {
   SheetDraft,
   SimplifyDraft,
   SpotlightDraft,
-  Theme,
 } from "./lib/prefs";
 import "./App.css";
 import { IconGrid, IconHome, IconImage, IconMore, IconPlay } from "./icons";
@@ -44,6 +49,31 @@ type Source =
   | { kind: "gif"; info: GifInfo };
 
 type View = "home" | "config" | "player" | "grid" | "zoom";
+
+/** Content size of the window while it is the recording strip. */
+const STRIP_SIZE: [number, number] = [380, 56];
+
+/** `2026-11-23-210733` in local time, for default export file names. */
+function fileStamp(ms: number): string {
+  const d = new Date(ms);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}-` +
+    `${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`
+  );
+}
+
+/** Last path segment, whichever slash the path uses. */
+function baseName(path: string): string {
+  return path.split(/[/\\]/).pop() || path;
+}
+
+/** Whether two paths name the same file, ignoring slash style and case
+ *  (Windows and default macOS volumes are case-insensitive). */
+function samePath(a: string, b: string): boolean {
+  const norm = (p: string) => p.replace(/[/\\]+/g, "/").toLowerCase();
+  return norm(a) === norm(b);
+}
 
 export default function App() {
   const [view, setView] = useState<View>("home");
@@ -60,6 +90,16 @@ export default function App() {
 
   const [source, setSource] = useState<Source | null>(null);
   const [compactNavOpen, setCompactNavOpen] = useState(false);
+  // Natural content height reported by Home, tagged with the layout it
+  // was measured in (null = not measured yet).
+  const [homeMeasure, setHomeMeasure] = useState<{
+    h: number;
+    compact: boolean;
+  } | null>(null);
+  const handleHomeHeight = useCallback(
+    (h: number, compact: boolean) => setHomeMeasure({ h, compact }),
+    [],
+  );
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [thumbs, setThumbs] = useState<FrameThumb[]>([]);
   const [playerFrames, setPlayerFrames] = useState<FrameThumb[]>([]);
@@ -69,11 +109,25 @@ export default function App() {
   const [edits, setEdits] = useState<FrameEdits>({});
   const [frameDelays, setFrameDelays] = useState<Record<number, number>>({});
   const [inputEvents, setInputEvents] = useState<InputEvent[]>([]);
-  // Player in/out trim (inclusive original frame indices). null = no
-  // trim active (full range). Frames outside the trim are skipped at
-  // playback and excluded from sprite-sheet export.
-  const [trim, setTrim] = useState<{ inIdx: number; outIdx: number } | null>(
-    null,
+  // The kept stretch of the clip, as positions in the displayed frame
+  // order (see lib/trim.ts). null = the whole clip. Frames outside it
+  // are skipped in playback and left out of every export.
+  const [trim, setTrim] = useState<TrimRange | null>(null);
+
+  // Every change to the frame order after load goes through here, so the
+  // trim follows its frames to their new positions instead of staying on
+  // the same slots (which would start cutting different frames).
+  const frameOrderRef = useRef<number[]>([]);
+  frameOrderRef.current = frameOrder;
+  const changeFrameOrder = useCallback(
+    (update: number[] | ((prev: number[]) => number[]), moved?: number) => {
+      const prev = frameOrderRef.current;
+      const next = typeof update === "function" ? update(prev) : update;
+      frameOrderRef.current = next;
+      setFrameOrder(next);
+      setTrim((t) => remapTrim(prev, next, t, moved));
+    },
+    [],
   );
 
   const [history, setHistory] = useState<HistoryEntry[]>([]);
@@ -83,6 +137,56 @@ export default function App() {
 
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Progress of an export in flight. Shown as an overlay in every view,
+  // so a long encode never looks like nothing is happening.
+  const [exporting, setExporting] = useState<{
+    label: string;
+    done: number;
+    total: number;
+  } | null>(null);
+  // A short message floating over the window ("Saved …"), with an
+  // optional follow-up button such as "Show in folder".
+  const [notice, setNotice] = useState<{
+    id: number;
+    message: string;
+    /** "success" confirms something done; "info" explains a no-op. */
+    tone: "success" | "info";
+    action?: { label: string; run: () => void };
+  } | null>(null);
+  // When the current source was captured or opened; dates the default
+  // export file names.
+  const [sourceTime, setSourceTime] = useState(() => Date.now());
+
+  const notify = useCallback(
+    (
+      message: string,
+      action?: { label: string; run: () => void },
+      tone: "success" | "info" = "success",
+    ) => {
+      setNotice({ id: Date.now(), message, tone, action });
+    },
+    [],
+  );
+  const notifySaved = useCallback(
+    (path: string) =>
+      notify(`Saved ${baseName(path)}`, {
+        label: "Show in folder",
+        run: () => {
+          api.revealInFolder(path).catch((e) => setError(String(e)));
+        },
+      }),
+    [notify],
+  );
+  // Messages clear themselves; ones with a button stay a little longer
+  // so there is time to use it.
+  useEffect(() => {
+    if (!notice) return;
+    const handle = window.setTimeout(
+      () => setNotice(null),
+      notice.action ? 8000 : 4000,
+    );
+    return () => window.clearTimeout(handle);
+  }, [notice]);
 
   // Persisted player state — survive view navigation.
   const [playerPlaying, setPlayerPlaying] = useState(true);
@@ -95,6 +199,15 @@ export default function App() {
 
   const isRecordingRef = useRef(false);
   isRecordingRef.current = isRecording;
+  const countdownRef = useRef<number | null>(null);
+  countdownRef.current = countdown;
+  const prefsRef = useRef(prefs);
+  prefsRef.current = prefs;
+
+  // Spotlight is switched per clip, in the Player or the Editor. The
+  // Settings toggle only decides whether a new clip starts with it on,
+  // so turning it on for one recording doesn't follow you into the next.
+  const [spotlightOn, setSpotlightOn] = useState(false);
 
   // ——— startup ———
   useEffect(() => {
@@ -134,8 +247,8 @@ export default function App() {
   }, [prefs.theme]);
 
   // Auto-resize the window to fit the current view.
-  //   - Home: respects `compactUi` — the only view where the toggle
-  //     applies. Compact drops the hero entirely.
+  //   - Home: sized to its content, in the full or the compact layout
+  //     (`compactUi`), so there is no empty space under the last card.
   //   - Config: a taller, slightly wider panel than compact home so
   //     all settings fit without scrolling.
   //   - Player / Grid / Zoom: sized to the loaded animation, plus the
@@ -145,8 +258,29 @@ export default function App() {
   //     screen).
   // Tauri's setSize anchors at the existing top-left, which is what
   // we want — the user's window position stays put as the size flexes.
+  //
+  // While recording, the window is instead a small always-on-top strip
+  // (timer, Stop, Discard): out of the way of what is being recorded,
+  // and always reachable. The backend lowers the minimum size, resizes
+  // and pins the window in one step; afterwards it restores the normal
+  // constraints and the sizing effect below takes over again. This
+  // effect is declared first so that restore is requested before the
+  // window is sized for the view it returns to.
+  const stripShownRef = useRef(false);
+  useEffect(() => {
+    if (isRecording) {
+      stripShownRef.current = true;
+      api.setRecordingStrip(true, STRIP_SIZE[0], STRIP_SIZE[1]).catch(() => {});
+    } else if (stripShownRef.current) {
+      stripShownRef.current = false;
+      api.setRecordingStrip(false).catch(() => {});
+    }
+  }, [isRecording]);
+
   useEffect(() => {
     if (!prefsLoaded) return;
+    // The recording strip owns the window size while a take is running.
+    if (isRecording) return;
 
     const screenW = window.screen.availWidth;
     const screenH = window.screen.availHeight;
@@ -166,8 +300,22 @@ export default function App() {
     let target: LogicalSize | null = null;
 
     if (view === "home") {
-      const [w, h] = prefs.compactUi ? HOME_COMPACT : HOME_FULL;
-      target = new LogicalSize(w, h);
+      // Home fits its content in both layouts (Recent list, region
+      // panel, recording state, …). Wait for a measurement taken in the
+      // layout now on screen, so toggling compact resizes once, straight
+      // to the right size. The window also has to leave room for the tab
+      // bar and any error banner drawn around Home, and the full layout
+      // never grows past its original 910 px.
+      if (homeMeasure !== null && homeMeasure.compact === prefs.compactUi) {
+        const px = (sel: string) =>
+          document.querySelector<HTMLElement>(sel)?.offsetHeight ?? 0;
+        const around = px(".global-nav") + (error ? px(".banner") + 10 : 0);
+        const natural = homeMeasure.h + around;
+        const [w, h] = prefs.compactUi
+          ? [HOME_COMPACT[0], Math.min(maxH, natural)]
+          : [HOME_FULL[0], Math.min(HOME_FULL[1], maxH, Math.max(420, natural))];
+        target = new LogicalSize(w, h);
+      }
     } else if (view === "config") {
       target = new LogicalSize(CONFIG_SIZE[0], CONFIG_SIZE[1]);
     } else if (
@@ -198,7 +346,7 @@ export default function App() {
         .setSize(target)
         .catch(() => {});
     }
-  }, [prefsLoaded, prefs.compactUi, view, source]);
+  }, [prefsLoaded, prefs.compactUi, view, source, homeMeasure, error, isRecording]);
 
   const updatePrefs = useCallback((update: Partial<Preferences>) => {
     setPrefs((p) => ({ ...p, ...update }));
@@ -227,18 +375,14 @@ export default function App() {
   }, []);
 
   // ——— recording timer ———
+  // The strip shows whole seconds, so a few updates a second is plenty
+  // and keeps the app nearly idle while it records.
   useEffect(() => {
-    let raf = 0;
-    if (isRecording && recordStart !== null) {
-      const tick = () => {
-        setElapsedMs(Date.now() - recordStart);
-        raf = requestAnimationFrame(tick);
-      };
-      raf = requestAnimationFrame(tick);
-    }
-    return () => {
-      if (raf) cancelAnimationFrame(raf);
-    };
+    if (!isRecording || recordStart === null) return;
+    const tick = () => setElapsedMs(Date.now() - recordStart);
+    tick();
+    const handle = window.setInterval(tick, 200);
+    return () => window.clearInterval(handle);
   }, [isRecording, recordStart]);
 
   // ——— thumb loading after a source becomes current ———
@@ -257,6 +401,7 @@ export default function App() {
       setPlayerLoop("loop");
       setPlayerSpeed(1);
       setTrim(null);
+      setSpotlightOn(prefsRef.current.spotlight.enabled);
       try {
         setInputEvents(await api.listInputEvents());
       } catch {
@@ -304,6 +449,7 @@ export default function App() {
         await api.loadGif(path);
         const info = await ready;
         setSource({ kind: "gif", info });
+        setSourceTime(Date.now());
         const thumbList = await loadThumbs();
         addHistoryEntry({
           id: Date.now(),
@@ -347,8 +493,30 @@ export default function App() {
   }, [handleLoadGif]);
 
   // ——— start recording ———
+  // True while the on-screen countdown is up, so it is only torn down
+  // when it was actually shown.
+  const countdownShownRef = useRef(false);
+  // True from the moment a take is being started until it is running (or
+  // failed), so a second press of Record or the hotkey can't start
+  // another one on top of it.
+  const startingRef = useRef(false);
+
   const beginRecording = useCallback(async () => {
+    if (startingRef.current) return;
+    startingRef.current = true;
     setError(null);
+    if (countdownShownRef.current) {
+      countdownShownRef.current = false;
+      // Take the countdown off the screen and give the compositor a
+      // moment, so the number can't show up in the first captured frame.
+      await api.hideCountdownIndicator().catch(() => {});
+      await new Promise((r) => setTimeout(r, 150));
+    }
+    // Exclude Glattice from screen capture so it stays visible (with its
+    // Stop button) but never appears inside the recording.
+    const win = getCurrentWindow();
+    await win.setContentProtected(true).catch(() => {});
+    await new Promise((r) => setTimeout(r, 100));
     try {
       await api.startRecording(
         prefs.fps,
@@ -360,11 +528,19 @@ export default function App() {
       setIsRecording(true);
       setRecordStart(Date.now());
       setElapsedMs(0);
+      // A take can be started from any tab with the hotkey. Whatever was
+      // open, come back to Home afterwards, where the encoding progress
+      // (or an error) is shown.
+      setView("home");
+      setCompactNavOpen(false);
       if (region) {
         api.showRecordingIndicator(region).catch(() => {});
       }
     } catch (e) {
+      await win.setContentProtected(false).catch(() => {});
       setError(String(e));
+    } finally {
+      startingRef.current = false;
     }
   }, [
     prefs.fps,
@@ -376,6 +552,7 @@ export default function App() {
   ]);
 
   const handleRecord = useCallback(() => {
+    if (startingRef.current) return;
     setError(null);
     const seconds = Math.max(0, Math.floor(prefs.countdownSeconds || 0));
     if (seconds <= 0) {
@@ -385,8 +562,21 @@ export default function App() {
     setCountdown(seconds);
   }, [prefs.countdownSeconds, beginRecording]);
 
+  // Stop a countdown without recording: Esc, a click on the overlay, or
+  // the record hotkey (the only one of the three that works while
+  // another app has the keyboard).
+  const cancelCountdown = useCallback(() => {
+    setCountdown(null);
+    if (countdownShownRef.current) {
+      countdownShownRef.current = false;
+      api.hideCountdownIndicator().catch(() => {});
+    }
+  }, []);
+
   // Drive the countdown each second; at 0 fire the actual recording
-  // start. ESC during the wait cancels (handled below).
+  // start. Each tick is also shown on screen, in the region about to be
+  // recorded (or the middle of the screen), since that is where the
+  // user is looking, not at this window.
   useEffect(() => {
     if (countdown === null) return;
     if (countdown <= 0) {
@@ -394,27 +584,43 @@ export default function App() {
       void beginRecording();
       return;
     }
+    countdownShownRef.current = true;
+    api.showCountdownIndicator(countdown).catch(() => {});
     const handle = window.setTimeout(() => {
       setCountdown((c) => (c === null ? null : c - 1));
     }, 1000);
     return () => window.clearTimeout(handle);
   }, [countdown, beginRecording]);
 
+  // "?" opens the keyboard shortcut list from any view.
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "?" || e.ctrlKey || e.metaKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName?.toLowerCase();
+      if (tag === "input" || tag === "textarea" || target?.isContentEditable) return;
+      setShortcutsOpen(true);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   // ESC aborts an in-progress countdown.
   useEffect(() => {
     if (countdown === null) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setCountdown(null);
-      }
+      if (e.key === "Escape") cancelCountdown();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [countdown]);
+  }, [countdown, cancelCountdown]);
 
   // ——— stop recording ———
   const handleStop = useCallback(async () => {
     api.hideRecordingIndicator().catch(() => {});
+    // Recording is over: let Glattice appear in screen captures again.
+    await getCurrentWindow().setContentProtected(false).catch(() => {});
     // High-quality (gifski) is gated by a Cargo feature. If the build
     // wasn't compiled with it, fall back to the standard encoder even
     // when the user's saved pref still has the toggle on — otherwise
@@ -464,6 +670,7 @@ export default function App() {
       setRecordStart(null);
       const info = await ready;
       setSource({ kind: "recording", info });
+      setSourceTime(Date.now());
       const thumbList = await loadThumbs();
       addHistoryEntry({
         id: Date.now(),
@@ -489,16 +696,35 @@ export default function App() {
     }
   }, [prefs.highQuality, highQualityAvailable, loadThumbs]);
 
-  // Ctrl+Shift+R toggles recording
+  // ——— discard recording ———
+  // Stop capturing and throw the take away: nothing is encoded and
+  // nothing is added to Recent.
+  const handleDiscard = useCallback(async () => {
+    api.hideRecordingIndicator().catch(() => {});
+    await getCurrentWindow().setContentProtected(false).catch(() => {});
+    try {
+      await api.discardRecording();
+      notify("Recording discarded");
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setIsRecording(false);
+      setRecordStart(null);
+    }
+  }, [notify]);
+
+  // Ctrl+Shift+R toggles recording. During the countdown it backs out
+  // instead, so there is a way to cancel from whatever app has focus.
   useEffect(() => {
     const unlistenPromise = listen("toggle-recording", () => {
-      if (isRecordingRef.current) handleStop();
+      if (countdownRef.current !== null) cancelCountdown();
+      else if (isRecordingRef.current) handleStop();
       else handleRecord();
     });
     return () => {
       unlistenPromise.then((fn) => fn()).catch(() => {});
     };
-  }, [handleRecord, handleStop]);
+  }, [handleRecord, handleStop, cancelCountdown]);
 
   // ——— region overlay ———
   const handleSelectRegion = useCallback(async () => {
@@ -554,7 +780,8 @@ export default function App() {
         if (picked) {
           await api.setRegion(picked);
           setRegion(picked);
-          api.showRecordingIndicator(picked).catch(() => {});
+          // The recording indicator dims everything outside the region and
+          // stays topmost, so it is shown only once recording starts.
         }
       } catch (e) {
         setError(String(e));
@@ -579,28 +806,121 @@ export default function App() {
     return frameOrder.map((i) => byIdx.get(i)).filter((t): t is FrameThumb => t != null);
   }, [playerFrames, frameOrder]);
 
+  // Spotlight follows the recorded cursor, so it only exists for clips
+  // that have one (recorded with Cursor set to Show or Overlay).
+  const clipHasCursor = useMemo(
+    () =>
+      thumbs.some((t) => t.cursor !== null) ||
+      playerFrames.some((t) => t.cursor !== null),
+    [thumbs, playerFrames],
+  );
+
+  // The spotlight as every view and export applies it: the remembered
+  // look (radius, darkness) from Settings, switched by this clip's own
+  // toggle, and never on for a clip without a cursor.
+  const spotlight = useMemo<SpotlightDraft>(
+    () => ({ ...prefs.spotlight, enabled: spotlightOn && clipHasCursor }),
+    [prefs.spotlight, spotlightOn, clipHasCursor],
+  );
+
+  // From the Player's and Editor's Spotlight controls. On/off belongs to
+  // the clip; radius and darkness are remembered as the effect's look.
+  const handleSpotlightChange = useCallback(
+    (update: Partial<SpotlightDraft>) => {
+      const { enabled, ...look } = update;
+      if (Object.keys(look).length > 0) updateSpotlight(look);
+      if (enabled === undefined) return;
+      if (enabled && !clipHasCursor) {
+        // Say why nothing happens, and where to change it, instead of a
+        // switch that silently does nothing.
+        notify(
+          "This clip has no cursor to spotlight. Turn on Cursor in Settings before recording.",
+          { label: "Open Settings", run: () => setView("config") },
+          "info",
+        );
+        return;
+      }
+      setSpotlightOn(enabled);
+    },
+    [clipHasCursor, notify, updateSpotlight],
+  );
+
+  // Frame rate the clip plays at, for exports.
+  const clipFps =
+    source?.kind === "recording"
+      ? source.info.fps
+      : source?.kind === "gif"
+        ? source.info.inferredFps
+        : prefs.fps;
+
+  // True once the clip on screen differs from the captured file: any
+  // edit, trim, hold, reorder, deleted or inserted frame, or an overlay
+  // that is drawn at render time (clicks, keys, an un-baked cursor, the
+  // spotlight). Exports then have to render frames instead of copying
+  // the capture, and the capture file must not be handed out as-is.
+  const clipModified = useMemo(() => {
+    if (!source) return false;
+    if (trim !== null) return true;
+    if (Object.values(edits).some((list) => list.length > 0)) return true;
+    if (Object.keys(frameDelays).length > 0) return true;
+    if (inputEvents.length > 0) return true;
+    if (
+      thumbs.length !== source.info.frameCount ||
+      frameOrder.length !== thumbs.length ||
+      frameOrder.some((idx, i) => idx !== thumbs[i].index)
+    ) {
+      return true;
+    }
+    const cursorBaked =
+      source.kind === "recording" && source.info.cursorBaked === true;
+    return clipHasCursor && (!cursorBaked || spotlight.enabled);
+  }, [
+    source,
+    trim,
+    edits,
+    frameDelays,
+    inputEvents,
+    thumbs,
+    frameOrder,
+    clipHasCursor,
+    spotlight.enabled,
+  ]);
+
+  // Default file name (without extension) for anything exported from
+  // this clip: the opened file's own name, or a dated "recording-…" for
+  // takes, including ones reopened from Recent under their internal
+  // name (recording-12.gif).
+  const exportStem = useMemo(() => {
+    if (source?.kind === "gif") {
+      const stem = baseName(source.info.path).replace(/\.[^.]+$/, "");
+      if (stem && !/^recording-\d+$/.test(stem)) return stem;
+    }
+    return `recording-${fileStamp(sourceTime)}`;
+  }, [source, sourceTime]);
+
+  const defaultExportPath = useCallback(
+    (fileName: string) =>
+      prefs.defaultSaveDir
+        ? `${prefs.defaultSaveDir.replace(/[/\\]+$/, "")}/${fileName}`
+        : fileName,
+    [prefs.defaultSaveDir],
+  );
+
   const handleSaveVideo = useCallback(
     async (format: VideoFormat) => {
       if (thumbs.length === 0) return;
       const playerThumbs =
         orderedPlayerFrames.length > 0 ? orderedPlayerFrames : orderedThumbs;
-      const fps =
-        source?.kind === "recording"
-          ? source.info.fps
-          : source?.kind === "gif"
-            ? source.info.inferredFps
-            : prefs.fps;
       const ext = format;
       const target = await saveDialog({
-        defaultPath: prefs.defaultSaveDir
-          ? `${prefs.defaultSaveDir.replace(/[/\\]+$/, "")}/recording.${ext}`
-          : `recording.${ext}`,
+        defaultPath: defaultExportPath(`${exportStem}.${ext}`),
         filters: [
           { name: format === "mp4" ? "MP4 video" : "WebM video", extensions: [ext] },
         ],
       });
       if (!target) return;
-      setBusy(`Encoding ${format.toUpperCase()}…`);
+      const label = `Exporting ${format === "mp4" ? "MP4" : "WebM"}`;
+      setExporting({ label, done: 0, total: playerThumbs.length });
       setError(null);
       try {
         const bytes = await encodeVideo({
@@ -608,23 +928,24 @@ export default function App() {
           trim,
           edits,
           inputEvents,
-          fps: Math.max(1, Math.round(fps)),
+          fps: Math.max(1, Math.round(clipFps)),
           format,
           audioPath:
             source?.kind === "recording" ? source.info.audioPath : null,
-          spotlight: prefs.spotlight,
+          spotlight,
           frameDelays,
-          onProgress: (done, total) =>
-            setBusy(`Encoding ${format.toUpperCase()}… ${done}/${total}`),
+          onProgress: (done, total) => setExporting({ label, done, total }),
         });
         await writeFile(target, bytes);
+        notifySaved(target);
       } catch (e) {
         setError(String(e));
       } finally {
-        setBusy(null);
+        setExporting(null);
       }
     },
     [
+      thumbs.length,
       orderedThumbs,
       orderedPlayerFrames,
       trim,
@@ -632,27 +953,76 @@ export default function App() {
       inputEvents,
       frameDelays,
       source,
-      prefs.fps,
-      prefs.defaultSaveDir,
+      clipFps,
+      spotlight,
+      exportStem,
+      defaultExportPath,
+      notifySaved,
     ],
   );
 
   const handleSaveGif = useCallback(async () => {
-    if (!source) return;
-    const ext = "gif";
+    if (!source || thumbs.length === 0) return;
+    // An edited copy of someone's own GIF shouldn't default to the
+    // original's name.
+    const editedImport =
+      clipModified && source.kind === "gif" && !exportStem.startsWith("recording-");
     const target = await saveDialog({
-      defaultPath: prefs.defaultSaveDir
-        ? `${prefs.defaultSaveDir.replace(/[/\\]+$/, "")}/recording.${ext}`
-        : `recording.${ext}`,
-      filters: [{ name: "GIF", extensions: [ext] }],
+      defaultPath: defaultExportPath(
+        `${exportStem}${editedImport ? "-edited" : ""}.gif`,
+      ),
+      filters: [{ name: "GIF", extensions: ["gif"] }],
     });
     if (!target) return;
+    setError(null);
     try {
-      await copyFile(source.info.path, target);
+      if (!clipModified) {
+        // Nothing was changed, so the captured file already is the clip.
+        // (Saving an opened GIF over itself is then a no-op.)
+        if (!samePath(source.info.path, target)) {
+          await copyFile(source.info.path, target);
+        }
+      } else {
+        // Render what the Player shows: edits, trim, order, holds and
+        // overlays all end up in the file.
+        const frames =
+          orderedPlayerFrames.length > 0 ? orderedPlayerFrames : orderedThumbs;
+        const label = "Exporting GIF";
+        setExporting({ label, done: 0, total: frames.length });
+        const bytes = await encodeGif({
+          thumbs: frames,
+          trim,
+          edits,
+          inputEvents,
+          fps: Math.max(1, clipFps),
+          frameDelays,
+          spotlight,
+          onProgress: (done, total) => setExporting({ label, done, total }),
+        });
+        await writeFile(target, bytes);
+      }
+      notifySaved(target);
     } catch (e) {
       setError(String(e));
+    } finally {
+      setExporting(null);
     }
-  }, [source, prefs.defaultSaveDir]);
+  }, [
+    source,
+    thumbs.length,
+    clipModified,
+    exportStem,
+    defaultExportPath,
+    orderedThumbs,
+    orderedPlayerFrames,
+    trim,
+    edits,
+    inputEvents,
+    clipFps,
+    frameDelays,
+    spotlight,
+    notifySaved,
+  ]);
 
 
   const deletedIndices = useMemo(() => {
@@ -661,20 +1031,20 @@ export default function App() {
   }, [thumbs, frameOrder]);
 
   const handleRestore = useCallback((index: number) => {
-    setFrameOrder((o) => [...o, index]);
+    changeFrameOrder((o) => [...o, index]);
     setEdits((e) => { const next = { ...e }; delete next[index]; return next; });
-  }, []);
+  }, [changeFrameOrder]);
 
   const handleInsertBlankFrame = useCallback(async () => {
     try {
       const result = await api.insertBlankFrame();
       setThumbs((prev) => [...prev, result.thumb]);
       setPlayerFrames((prev) => [...prev, result.playerFrame]);
-      setFrameOrder((prev) => [...prev, result.thumb.index]);
+      changeFrameOrder((prev) => [...prev, result.thumb.index]);
     } catch (e) {
       setError(String(e));
     }
-  }, []);
+  }, [changeFrameOrder]);
 
   const handleClearRegion = useCallback(async () => {
     try {
@@ -694,13 +1064,14 @@ export default function App() {
     prefs.compactUi &&
     !overlayPrev &&
     !regionPrep &&
-    view !== "home" &&
+    // On Home it only appears once there is something to go back to.
+    (view !== "home" || !!source) &&
     view !== "config";
 
   const compactNavButton = showCompactNav ? (
     <button
       type="button"
-      className={`icon-btn ${compactNavOpen ? "icon-btn--active" : ""}`}
+      className={`icon-btn compact-nav-btn ${compactNavOpen ? "icon-btn--active" : ""}`}
       onClick={() => setCompactNavOpen((o) => !o)}
       title="Navigate"
       aria-haspopup="true"
@@ -728,6 +1099,21 @@ export default function App() {
     );
   }
 
+  if (isRecording) {
+    // The whole window is the recording strip until the take ends.
+    return (
+      <div className="app app--strip">
+        <RecordingStrip
+          elapsedMs={elapsedMs}
+          fps={prefs.fps}
+          region={region}
+          onStop={handleStop}
+          onDiscard={handleDiscard}
+        />
+      </div>
+    );
+  }
+
   const sourceLabel =
     source?.kind === "recording"
       ? `Recording · ${source.info.width}×${source.info.height} · ${source.info.fps} fps`
@@ -738,35 +1124,72 @@ export default function App() {
   return (
     <div className="app">
       {error && (
-        <div className="banner banner--error" onClick={() => setError(null)}>
-          {error}
-          <span className="banner__dismiss">dismiss</span>
+        <ErrorBanner error={error} onDismiss={() => setError(null)} />
+      )}
+
+      {exporting && (
+        <div className="export-overlay" role="status" aria-live="polite">
+          <div className="export-overlay__card">
+            <div className="export-overlay__label">{exporting.label}…</div>
+            <div
+              className="export-overlay__bar"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={exporting.total}
+              aria-valuenow={exporting.done}
+            >
+              <div
+                className="export-overlay__fill"
+                style={{
+                  width: `${exporting.total > 0 ? (exporting.done / exporting.total) * 100 : 0}%`,
+                }}
+              />
+            </div>
+            <div className="export-overlay__count muted">
+              Frame {exporting.done} of {exporting.total}
+            </div>
+          </div>
         </div>
+      )}
+
+      {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)} />}
+      {notice && (
+        <Toast
+          key={notice.id}
+          message={notice.message}
+          tone={notice.tone}
+          actionLabel={notice.action?.label}
+          onAction={
+            notice.action
+              ? () => {
+                  notice.action?.run();
+                  setNotice(null);
+                }
+              : undefined
+          }
+          onDismiss={() => setNotice(null)}
+        />
       )}
 
       {countdown !== null && (
         <div
           className="countdown-overlay"
-          onClick={() => setCountdown(null)}
+          onClick={cancelCountdown}
           role="status"
           aria-label={`Recording starts in ${countdown}`}
         >
           <div className="countdown-overlay__number">{countdown || "GO"}</div>
           <div className="countdown-overlay__hint">
-            ESC or click to cancel
+            Esc, click, or Ctrl+Shift+R to cancel
           </div>
         </div>
       )}
 
       {view === "home" && (
         <Home
-          isRecording={isRecording}
-          elapsedMs={elapsedMs}
-          fps={prefs.fps}
           region={region}
           supported={supported}
           busy={busy}
-          theme={prefs.theme}
           compact={prefs.compactUi}
           history={history}
           onOpenHistory={handleLoadGif}
@@ -774,12 +1197,12 @@ export default function App() {
             removeHistoryEntry(id).then(setHistory).catch(() => {})
           }
           onRecord={handleRecord}
-          onStop={handleStop}
           onSelectRegion={handleSelectRegion}
-          onSelectRegionHover={() => api.precaptureOverlayBg().catch(() => {})}
           onClearRegion={handleClearRegion}
           onConfig={() => setView("config")}
-          onThemeChange={(t: Theme) => updatePrefs({ theme: t })}
+          onCompactChange={(c: boolean) => updatePrefs({ compactUi: c })}
+          onContentHeight={handleHomeHeight}
+          compactNavButton={compactNavButton}
           onDropGif={handleLoadGif}
         />
       )}
@@ -790,6 +1213,7 @@ export default function App() {
           highQualityAvailable={highQualityAvailable}
           onChange={updatePrefs}
           onBack={() => setView("home")}
+          onShowShortcuts={() => setShortcutsOpen(true)}
         />
       )}
 
@@ -800,19 +1224,18 @@ export default function App() {
           inputEvents={inputEvents}
           trim={trim}
           onTrimChange={setTrim}
-          dragSourcePath={source?.info.path ?? null}
-          fps={
-            source?.kind === "recording"
-              ? source.info.fps
-              : source?.kind === "gif"
-                ? source.info.inferredFps
-                : prefs.fps
-          }
+          // Dragging hands out the captured file as-is, so it is only
+          // offered while that file still matches what is on screen.
+          dragSourcePath={clipModified ? null : (source?.info.path ?? null)}
+          fps={clipFps}
           sourceLabel={sourceLabel}
           onBack={() => setView("home")}
           onSaveGif={handleSaveGif}
           onSaveVideo={handleSaveVideo}
-          spotlight={prefs.spotlight}
+          onExportSheet={() => setShowPreviewModal(true)}
+          spotlight={spotlight}
+          onSpotlightChange={handleSpotlightChange}
+          spotlightAvailable={clipHasCursor}
           frameDelays={frameDelays}
           playing={playerPlaying}
           onPlayingChange={setPlayerPlaying}
@@ -829,23 +1252,22 @@ export default function App() {
           thumbs={orderedPlayerFrames.length > 0 ? orderedPlayerFrames : orderedThumbs}
           edits={edits}
           inputEvents={inputEvents}
-          spotlight={prefs.spotlight}
+          spotlight={spotlight}
           sheet={prefs.sheet}
           onSheetChange={updateSheet}
           trim={trim}
           deletedIndices={deletedIndices}
           onRestore={handleRestore}
           onZoom={(i) => { setZoomIndex(i); setView("zoom"); }}
-          onReorder={setFrameOrder}
+          onReorder={changeFrameOrder}
           onDelete={(indices) => {
             const toRemove = new Set(indices);
-            setFrameOrder((o) => o.filter((i) => !toRemove.has(i)));
+            changeFrameOrder((o) => o.filter((i) => !toRemove.has(i)));
           }}
           frameDelays={frameDelays}
           onDelayChange={updateFrameDelay}
           onInsertBlank={handleInsertBlankFrame}
           onPreview={() => setShowPreviewModal(true)}
-          onBack={() => setView("player")}
           compactNavButton={compactNavButton}
         />
       )}
@@ -857,13 +1279,17 @@ export default function App() {
           edits={edits}
           inputEvents={inputEvents}
           simplify={prefs.simplify}
-          spotlight={prefs.spotlight}
-          onSpotlightChange={updateSpotlight}
+          spotlight={spotlight}
+          onSpotlightChange={handleSpotlightChange}
+          spotlightAvailable={clipHasCursor}
           onBack={() => setView("grid")}
           onNavigate={setZoomIndex}
-          onDelete={(idx) => setFrameOrder((o) => o.filter((i) => i !== idx))}
+          onDelete={(idx) => changeFrameOrder((o) => o.filter((i) => i !== idx))}
           onEditsChange={setEdits}
           onSimplifyChange={updateSimplify}
+          exportPath={defaultExportPath(`${exportStem}-frame`)}
+          onSaved={notifySaved}
+          onError={setError}
           compactNavButton={compactNavButton}
         />
       )}
@@ -874,8 +1300,9 @@ export default function App() {
           frameOrder={frameOrder}
           edits={edits}
           trim={trim}
-          spotlight={prefs.spotlight}
-          defaultDir={prefs.defaultSaveDir}
+          spotlight={spotlight}
+          defaultPath={defaultExportPath(`${exportStem}-sheet.png`)}
+          onSaved={notifySaved}
           onClose={() => setShowPreviewModal(false)}
         />
       )}
@@ -919,7 +1346,7 @@ export default function App() {
             className={`global-nav__item ${view === "player" ? "global-nav__item--active" : ""}`}
             onClick={() => source && setView("player")}
             disabled={!source}
-            title="Player"
+            title={source ? "Player" : "Record or open a GIF to unlock"}
           >
             <IconPlay size={20} />
             <span>Player</span>
@@ -929,7 +1356,7 @@ export default function App() {
             className={`global-nav__item ${view === "grid" ? "global-nav__item--active" : ""}`}
             onClick={() => source && setView("grid")}
             disabled={!source}
-            title="Frames"
+            title={source ? "Frames" : "Record or open a GIF to unlock"}
           >
             <IconGrid size={20} />
             <span>Frames</span>
@@ -945,7 +1372,7 @@ export default function App() {
               setView("zoom");
             }}
             disabled={!source}
-            title="Frame editor"
+            title={source ? "Frame editor" : "Record or open a GIF to unlock"}
           >
             <IconImage size={20} />
             <span>Editor</span>

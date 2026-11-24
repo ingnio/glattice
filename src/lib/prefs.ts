@@ -42,6 +42,9 @@ export interface SimplifyDraft {
 }
 
 export interface SpotlightDraft {
+  /** In saved preferences: whether a new recording starts with the
+   *  spotlight on. Each clip then has its own switch (Player / Editor),
+   *  and the value handed to views and exports is that clip's state. */
   enabled: boolean;
   /** Spotlight radius in source-frame pixels. */
   radius: number;
