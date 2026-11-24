@@ -1,5 +1,42 @@
 # Changelog
 
+## Unreleased
+
+### Recording
+- While recording, Glattice becomes a small always-on-top strip with a timer, Stop and Discard, and stays out of the recording
+- The countdown is shown on screen where the recording will happen
+- Glattice hides while you select a region, then offers Record, Change region or Reset
+- Escape cancels drawing a region and clears a selected one
+
+### Export
+- GIF export now includes edits, trim, frame order, click rings, key labels and the cursor
+- Exports show progress, then a confirmation with **Show in folder**; errors are explained in plain language
+- MP4 and WebM no longer fail or play at the wrong speed after frames are reordered
+- Sprite sheets now draw the cursor, click rings and key labels, as the Player does
+
+### Trim
+- The trim follows its frames when frames are deleted, restored, inserted or reordered
+- A frame dragged past a trim mark drops out of the clip; one dragged between the marks joins it
+- Trimmed-off frames are dimmed and tagged in Frames, and can't be opened in the editor
+
+### Editor
+- Box tools (rectangle, ellipse, blur, simplify) move and resize their own boxes without switching to Select
+- Letter keys pick tools; redo added (`Ctrl+Y`)
+- An options strip names the active tool and says how to use it
+
+### Interface
+- Keyboard shortcut list on `?`
+- Home is simpler: the window fits its content, Compact and Settings are icon buttons, and Recent rows show file names
+- The Player has a labelled Export menu and a Spotlight switch per recording
+- Frames explains its gestures and shows selection clearly; Sheet layout controls are labelled
+- Settings are grouped and reworded; the theme switch moved there
+- The window no longer flashes blank at launch
+
+### Project
+- The installer shows the MIT license; the separate EULA is gone
+- Third-party licenses are listed in `THIRD-PARTY-NOTICES.md` and installed with the app
+- Added contributor guide, code of conduct, security policy, and automated builds
+
 ## [0.1.0] — 2026-04-26
 
 First public release.

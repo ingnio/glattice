@@ -73,12 +73,17 @@ pub enum Edit {
         path: String,
         /// Browser URL — ignored in Rust (extra field).
         #[serde(default)]
+        #[allow(dead_code)]
         src: String,
         x: f32,
         y: f32,
         w: f32,
         h: f32,
+        // The image's own size. The frontend sends it; Rust reads the
+        // file and doesn't need it.
+        #[allow(dead_code)]
         natural_w: u32,
+        #[allow(dead_code)]
         natural_h: u32,
     },
     #[serde(rename_all = "camelCase")]
