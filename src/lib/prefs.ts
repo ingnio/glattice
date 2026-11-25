@@ -119,7 +119,7 @@ export const DEFAULT_PREFS: Preferences = {
   recordAudio: false,
   countdownSeconds: 3,
   defaultSaveDir: null,
-  theme: "light",
+  theme: "system",
   regionDetection: "medium",
   compactUi: false,
   sheet: DEFAULT_SHEET,

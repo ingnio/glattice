@@ -53,6 +53,7 @@
 - The Player has a labelled Export menu and a Spotlight switch per recording
 - Frames explains its gestures and shows selection clearly; Sheet layout controls are labelled
 - Settings are grouped and reworded; the theme switch moved there
+- The theme follows your system setting by default, instead of starting in Light
 - The window no longer flashes blank at launch
 - Home always fits its window: a long Recent list scrolls inside its own card
 - In the Player, `Esc` closes an open menu instead of jumping back to Home
