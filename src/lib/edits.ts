@@ -172,6 +172,35 @@ export function cloneEdit(edit: Edit): Edit {
   return { ...edit };
 }
 
+/** Move one edit by (dx, dy) source pixels. */
+export function shiftEdit(edit: Edit, dx: number, dy: number): Edit {
+  if (edit.kind === "arrow") {
+    return {
+      ...edit,
+      x1: edit.x1 + dx,
+      y1: edit.y1 + dy,
+      x2: edit.x2 + dx,
+      y2: edit.y2 + dy,
+    };
+  }
+  if (edit.kind === "freehand") {
+    return {
+      ...edit,
+      points: edit.points.map((p) => [p[0] + dx, p[1] + dy] as [number, number]),
+    };
+  }
+  return { ...edit, x: edit.x + dx, y: edit.y + dy };
+}
+
+/** Move every edit on every frame, e.g. after the frames are cropped. */
+export function shiftAllEdits(all: FrameEdits, dx: number, dy: number): FrameEdits {
+  const next: FrameEdits = {};
+  for (const [frame, list] of Object.entries(all)) {
+    next[Number(frame)] = list.map((e) => shiftEdit(e, dx, dy));
+  }
+  return next;
+}
+
 export function getFrameEdits(all: FrameEdits, frame: number): Edit[] {
   return all[frame] ?? [];
 }

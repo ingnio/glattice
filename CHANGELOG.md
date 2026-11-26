@@ -8,6 +8,9 @@
 - The strip shows how tall the picture has become; it opens in the editor, which shows tall pictures at full width and scrolls
 - Glattice says so if part of the page went by too fast to join up, or if the picture reached its size limit (20,000 pixels tall)
 
+### Editor
+- **Crop**: drag the handle on any edge of the picture to mark out a crop, then confirm to cut every frame down to it. Annotations, the cursor and click rings move with the picture. `Ctrl+Z` takes a crop back (up to the last three)
+
 ## [0.2.0] — 2026-11-24
 
 ### Screenshots

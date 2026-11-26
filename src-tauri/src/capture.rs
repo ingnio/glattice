@@ -345,6 +345,60 @@ impl CaptureState {
     }
 }
 
+/// Cut every frame of a recording down to the same rectangle, given in
+/// frame pixels. Cursor positions and recorded clicks move with it, so
+/// they still land on the same spot in the picture.
+///
+/// Returns the frames as they were, so the crop can be undone with
+/// `uncrop_recording`. The rectangle must lie inside the frames; the
+/// caller checks that.
+pub fn crop_recording(
+    rec: &mut Recording,
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+) -> Vec<CapturedFrame> {
+    use rayon::prelude::*;
+    let (cx, cy, cw, ch) = (x as usize, y as usize, width as usize, height as usize);
+    let old = std::mem::take(&mut rec.frames);
+    rec.frames = old
+        .par_iter()
+        .map(|f| {
+            let fw = f.width as usize;
+            let mut rgba = Vec::with_capacity(cw * ch * 4);
+            for row in cy..cy + ch {
+                let start = (row * fw + cx) * 4;
+                rgba.extend_from_slice(&f.rgba[start..start + cw * 4]);
+            }
+            CapturedFrame {
+                width,
+                height,
+                rgba,
+                elapsed_ms: f.elapsed_ms,
+                cursor: f.cursor.map(|(px, py)| (px - x as i32, py - y as i32)),
+            }
+        })
+        .collect();
+    shift_clicks(rec, -(x as i32), -(y as i32));
+    old
+}
+
+/// Put back the frames a crop at (`x`, `y`) replaced.
+pub fn uncrop_recording(rec: &mut Recording, frames: Vec<CapturedFrame>, x: u32, y: u32) {
+    rec.frames = frames;
+    shift_clicks(rec, x as i32, y as i32);
+}
+
+fn shift_clicks(rec: &mut Recording, dx: i32, dy: i32) {
+    for e in rec.input_events.iter_mut() {
+        if let InputEvent::Click { x, y, .. } = e {
+            *x += dx;
+            *y += dy;
+        }
+    }
+}
+
 /// Geometry of the monitor at `idx` in `Monitor::all()`. `None` falls
 /// back to the OS-reported primary monitor (or the first available).
 /// Capture one still frame, with no cursor, as a one-frame recording.
@@ -453,5 +507,65 @@ fn park_until(deadline: Instant, stop_flag: &AtomicBool) {
         }
         let remaining = deadline - now;
         std::thread::sleep(if remaining > slice { slice } else { remaining });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::input::MouseButton;
+
+    #[test]
+    fn crop_keeps_the_rectangle_and_moves_cursor_and_clicks() {
+        // A 4×3 frame whose pixels hold their own coordinates.
+        let (w, h) = (4u32, 3u32);
+        let mut rgba = Vec::new();
+        for yy in 0..h {
+            for xx in 0..w {
+                rgba.extend_from_slice(&[xx as u8, yy as u8, 0, 255]);
+            }
+        }
+        let mut rec = Recording {
+            fps: 5,
+            frames: vec![CapturedFrame {
+                width: w,
+                height: h,
+                rgba,
+                elapsed_ms: 0,
+                cursor: Some((3, 2)),
+            }],
+            input_events: vec![InputEvent::Click {
+                timestamp_ms: 0,
+                x: 2,
+                y: 1,
+                button: MouseButton::Left,
+            }],
+            audio: None,
+            cursor_baked: false,
+        };
+        let original = rec.frames[0].rgba.clone();
+        let old = crop_recording(&mut rec, 1, 1, 2, 2);
+        let f = &rec.frames[0];
+        assert_eq!((f.width, f.height), (2, 2));
+        assert_eq!(
+            f.rgba,
+            vec![1, 1, 0, 255, 2, 1, 0, 255, 1, 2, 0, 255, 2, 2, 0, 255]
+        );
+        assert_eq!(f.cursor, Some((2, 1)));
+        match rec.input_events[0] {
+            InputEvent::Click { x, y, .. } => assert_eq!((x, y), (1, 0)),
+            _ => panic!("expected a click"),
+        }
+
+        // Undoing puts everything back as it was.
+        uncrop_recording(&mut rec, old, 1, 1);
+        let f = &rec.frames[0];
+        assert_eq!((f.width, f.height), (w, h));
+        assert_eq!(f.rgba, original);
+        assert_eq!(f.cursor, Some((3, 2)));
+        match rec.input_events[0] {
+            InputEvent::Click { x, y, .. } => assert_eq!((x, y), (2, 1)),
+            _ => panic!("expected a click"),
+        }
     }
 }

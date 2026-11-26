@@ -66,7 +66,26 @@ pub struct AppState {
     /// full window goes back to where it was instead of growing from
     /// wherever the strip ended up (possibly half off-screen).
     pub strip_prev_pos: parking_lot::Mutex<Option<tauri::PhysicalPosition<i32>>>,
+    /// What the last few crops of the loaded clip replaced, newest last,
+    /// so they can be undone. Emptied when another clip is loaded.
+    pub crop_undo: parking_lot::Mutex<Vec<CropUndo>>,
 }
+
+/// Enough to take back one crop.
+pub struct CropUndo {
+    /// The frames as they were before it.
+    frames: Vec<CapturedFrame>,
+    /// Where the crop's top-left corner was in those frames.
+    x: u32,
+    y: u32,
+    /// The source the clip was loaded as before the crop. Its thumbnails
+    /// and player frames are still on disk, so going back is instant.
+    source_id: u64,
+}
+
+/// Crops that can be undone in a row. Each one keeps a full copy of the
+/// frames it replaced, so this stays small.
+const CROP_UNDO_DEPTH: usize = 3;
 
 #[derive(Clone, Copy, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -98,6 +117,7 @@ impl AppState {
             precapture_monitor_idx: parking_lot::Mutex::new(None),
             strip_active: std::sync::atomic::AtomicBool::new(false),
             strip_prev_pos: parking_lot::Mutex::new(None),
+            crop_undo: parking_lot::Mutex::new(Vec::new()),
         }
     }
 
@@ -478,6 +498,7 @@ fn stop_recording(
     dlog!("[stop_recording] begin");
 
     let recording = state.capture.stop()?;
+    state.crop_undo.lock().clear();
     dlog!(
         "[stop_recording] captured {} frames {}x{} @ {} fps in {:?}",
         recording.frames.len(),
@@ -510,7 +531,78 @@ fn capture_screenshot(app: tauri::AppHandle, state: State<'_, AppState>) -> AppR
     let monitor_index = *state.monitor_index.lock();
     dlog!("[capture_screenshot] region={region:?} monitor={monitor_index:?}");
     let recording = capture::capture_once(region, monitor_index)?;
+    state.crop_undo.lock().clear();
     Ok(finish_recording(app, recording, None, &state))
+}
+
+/// Crop every frame of the loaded clip to one rectangle (in frame
+/// pixels) and load the result in its place, as a new source. Reports
+/// through `recording-ready` / `recording-error`, like `stop_recording`.
+#[tauri::command]
+fn crop_frames(
+    app: tauri::AppHandle,
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+    state: State<'_, AppState>,
+) -> AppResult<u64> {
+    let mut recording = {
+        let mut guard = state.imported_gif.lock();
+        let rec = guard.as_ref().ok_or(AppError::NoGifLoaded)?;
+        let first = rec.frames.first().ok_or(AppError::NoFrames)?;
+        let (fw, fh) = (first.width, first.height);
+        let fits = width >= 1
+            && height >= 1
+            && x.checked_add(width).is_some_and(|r| r <= fw)
+            && y.checked_add(height).is_some_and(|b| b <= fh);
+        if !fits {
+            return Err(AppError::InvalidConfig(format!(
+                "crop {width}x{height} at ({x}, {y}) does not fit a {fw}x{fh} frame"
+            )));
+        }
+        if rec.frames.iter().any(|f| f.width != fw || f.height != fh) {
+            return Err(AppError::InvalidConfig(
+                "frames are not all the same size".into(),
+            ));
+        }
+        guard.take().expect("checked above")
+    };
+    dlog!(
+        "[crop_frames] {} frames to {width}x{height} at ({x}, {y})",
+        recording.frames.len()
+    );
+    let frames = capture::crop_recording(&mut recording, x, y, width, height);
+    if let Some(source_id) = *state.current_source_id.lock() {
+        let mut undo = state.crop_undo.lock();
+        undo.push(CropUndo { frames, x, y, source_id });
+        if undo.len() > CROP_UNDO_DEPTH {
+            undo.remove(0);
+        }
+    }
+    Ok(finish_recording(app, recording, None, &state))
+}
+
+/// Take back the most recent crop: the clip goes back to the frames and
+/// the source it had before. Returns that source's id.
+#[tauri::command]
+fn undo_crop(state: State<'_, AppState>) -> AppResult<u64> {
+    let mut undo = state.crop_undo.lock();
+    let mut guard = state.imported_gif.lock();
+    let rec = guard.as_mut().ok_or(AppError::NoGifLoaded)?;
+    let entry = undo
+        .last()
+        .ok_or_else(|| AppError::Other("there is no crop to undo".into()))?;
+    if entry.frames.len() != rec.frames.len() {
+        return Err(AppError::Other(
+            "frames were added since the crop, so it can't be undone".into(),
+        ));
+    }
+    let entry = undo.pop().expect("checked above");
+    dlog!("[undo_crop] back to source {}", entry.source_id);
+    capture::uncrop_recording(rec, entry.frames, entry.x, entry.y);
+    *state.current_source_id.lock() = Some(entry.source_id);
+    Ok(entry.source_id)
 }
 
 /// Encode a finished capture, write its thumbnails and player frames,
@@ -671,6 +763,7 @@ fn load_gif(
     state: State<'_, AppState>,
 ) -> AppResult<u64> {
     dlog!("[load_gif] begin path={path}");
+    state.crop_undo.lock().clear();
     let id = state.next_id();
     let app_bg = app.clone();
 
@@ -2046,6 +2139,8 @@ pub fn run() {
             discard_recording,
             capture_screenshot,
             scroll_capture_status,
+            crop_frames,
+            undo_crop,
             set_recording_strip,
             reveal_in_folder,
             load_gif,

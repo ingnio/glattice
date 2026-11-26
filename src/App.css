@@ -3267,6 +3267,8 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  /* Anchors the crop confirm bar. */
+  position: relative;
 }
 
 /* zoom__chrome is replaced by zoom__bar — kept for reference in
@@ -3466,6 +3468,93 @@ body {
   pointer-events: auto;
   cursor: default;
   touch-action: none;
+}
+
+/* ——— crop handles ——— */
+
+/* Pinned over the picture by Zoom, like the canvas. Lets clicks through
+ * everywhere except on the handles themselves. */
+.crop-layer {
+  position: absolute;
+  pointer-events: none;
+}
+
+.crop-layer__clip {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+/* The part that stays: everything around it is dimmed by its shadow. */
+.crop-layer__keep {
+  position: absolute;
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.62);
+  outline: 1px dashed rgba(255, 255, 255, 0.9);
+}
+
+.crop-handle {
+  position: absolute;
+  pointer-events: auto;
+  touch-action: none;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.55);
+  border-radius: 4px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+  transform: translate(-50%, -50%);
+  opacity: 0.85;
+  transition: opacity 0.12s, background 0.12s;
+}
+
+/* A larger area to grab than the bar that is drawn. */
+.crop-handle::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+}
+
+.crop-handle:hover,
+.crop-handle:active {
+  opacity: 1;
+  background: var(--accent);
+}
+
+.crop-handle--top,
+.crop-handle--bottom {
+  width: 40px;
+  height: 7px;
+  cursor: ns-resize;
+}
+
+.crop-handle--left,
+.crop-handle--right {
+  width: 7px;
+  height: 40px;
+  cursor: ew-resize;
+}
+
+/* Confirm or drop the crop: floats over the bottom of the picture. */
+.crop-bar {
+  position: absolute;
+  left: 50%;
+  bottom: 68px;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 12px;
+  border-radius: 8px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+  white-space: nowrap;
+}
+
+.crop-bar__size {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+  margin-right: 4px;
 }
 
 .editor-canvas--select {

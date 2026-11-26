@@ -68,6 +68,7 @@ To build it yourself instead, see [Building](#building).
 - **Annotation tools** — arrows, rectangles, ellipses, freehand lines, and text labels
 - **Step numbers** — click to drop numbered markers (1, 2, 3…) that point out steps in order; drag one to move it
 - **Image overlay** — insert a PNG/JPG/WebP image onto any frame; drag to move, drag corners to resize
+- **Crop** — drag the handle on any edge of the picture in the editor, then confirm, to crop every frame at once
 - **Blur** — drag a region to blur it for privacy
 - **Simplify** — replaces text and detail in a region with plain rounded shapes, hiding the content while keeping the layout
 - **Spotlight** — dims everything outside a circle around the cursor; switch it per recording

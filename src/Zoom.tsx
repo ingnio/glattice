@@ -38,6 +38,21 @@ import {
   IconUndo,
 } from "./icons";
 
+/** A rectangle in source pixels. */
+export interface CropRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+type CropEdge = "top" | "bottom" | "left" | "right";
+/** How far each edge has been dragged in, in source pixels. */
+type CropInsets = { top: number; bottom: number; left: number; right: number };
+const NO_CROP: CropInsets = { top: 0, bottom: 0, left: 0, right: 0 };
+/** Smallest picture a crop may leave, in source pixels per side. */
+const CROP_MIN = 16;
+
 interface Props {
   thumbs: FrameThumb[];
   index: number;
@@ -59,6 +74,14 @@ interface Props {
   /** Suggested save path for "Export frame", without the frame number
    *  or extension (`…/recording-…-frame`). */
   exportPath: string;
+  /** Crop every frame of the clip to this rectangle (source pixels).
+   *  Resolves once the cropped clip is loaded. */
+  onCrop: (rect: CropRect) => Promise<void>;
+  /** Set while a crop can be undone: for each frame, how many edits it
+   *  had when the crop was made. Undo takes the crop back once a frame
+   *  has no edits newer than that. */
+  cropUndoCounts: Record<number, number> | null;
+  onUndoCrop: () => void;
   /** Called with the saved file's path after a frame is exported. */
   onSaved: (path: string) => void;
   onError: (message: string) => void;
@@ -81,6 +104,9 @@ export default function Zoom({
   onEditsChange,
   onSimplifyChange,
   exportPath,
+  onCrop,
+  cropUndoCounts,
+  onUndoCrop,
   onSaved,
   onError,
   compactNavButton,
@@ -194,8 +220,19 @@ export default function Zoom({
   const redoRef = useRef<Record<number, Edit[]>>({});
   const [, setRedoTick] = useState(0);
 
+  // True when the crop is the newest thing to undo on this frame.
+  const undoIsCrop =
+    cropUndoCounts !== null &&
+    current != null &&
+    frameEdits.length <= (cropUndoCounts[current.index] ?? 0);
+
   const undo = useCallback(() => {
-    if (!current || frameEdits.length === 0) return;
+    if (!current) return;
+    if (undoIsCrop) {
+      onUndoCrop();
+      return;
+    }
+    if (frameEdits.length === 0) return;
     const removed = frameEdits[frameEdits.length - 1];
     const next = frameEdits.slice(0, -1);
     (redoRef.current[current.index] ??= []).push(removed);
@@ -204,7 +241,7 @@ export default function Zoom({
     if (selectedIdx !== null && selectedIdx >= next.length) {
       setSelectedIdx(null);
     }
-  }, [current, frameEdits, edits, onEditsChange, selectedIdx]);
+  }, [current, frameEdits, edits, onEditsChange, selectedIdx, undoIsCrop, onUndoCrop]);
 
   const redo = useCallback(() => {
     if (!current) return;
@@ -232,6 +269,109 @@ export default function Zoom({
     );
     if (ok) onDelete(current.index);
   }, [current, pos, onDelete]);
+
+  // ——— Crop ———
+  // Dragging a handle on an edge of the picture marks out a crop. It
+  // stays a preview until confirmed, because it cuts every frame, not
+  // only the one on screen.
+  const [crop, setCrop] = useState<CropInsets | null>(null);
+  const [cropping, setCropping] = useState(false);
+  const cropLayerRef = useRef<HTMLDivElement | null>(null);
+  const cropDragRef = useRef<{
+    edge: CropEdge;
+    x: number;
+    y: number;
+    start: CropInsets;
+    kx: number;
+    ky: number;
+  } | null>(null);
+
+  const onCropHandleDown = (edge: CropEdge) => (e: React.PointerEvent<HTMLDivElement>) => {
+    const layer = cropLayerRef.current;
+    if (!layer || !imgSize || cropping || e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const rect = layer.getBoundingClientRect();
+    cropDragRef.current = {
+      edge,
+      x: e.clientX,
+      y: e.clientY,
+      start: crop ?? NO_CROP,
+      kx: rect.width > 0 ? imgSize.w / rect.width : 1,
+      ky: rect.height > 0 ? imgSize.h / rect.height : 1,
+    };
+    setSelectedIdx(null);
+  };
+
+  const onCropHandleMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const drag = cropDragRef.current;
+    if (!drag || !imgSize) return;
+    const dx = (e.clientX - drag.x) * drag.kx;
+    const dy = (e.clientY - drag.y) * drag.ky;
+    const s0 = drag.start;
+    const clamp = (v: number, max: number) => Math.round(Math.max(0, Math.min(max, v)));
+    const next = { ...s0 };
+    if (drag.edge === "top") next.top = clamp(s0.top + dy, imgSize.h - s0.bottom - CROP_MIN);
+    if (drag.edge === "bottom") next.bottom = clamp(s0.bottom - dy, imgSize.h - s0.top - CROP_MIN);
+    if (drag.edge === "left") next.left = clamp(s0.left + dx, imgSize.w - s0.right - CROP_MIN);
+    if (drag.edge === "right") next.right = clamp(s0.right - dx, imgSize.w - s0.left - CROP_MIN);
+    const none = !next.top && !next.bottom && !next.left && !next.right;
+    setCrop(none ? null : next);
+  };
+
+  const onCropHandleUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!cropDragRef.current) return;
+    cropDragRef.current = null;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+  };
+
+  const cropSize =
+    crop && imgSize
+      ? { w: imgSize.w - crop.left - crop.right, h: imgSize.h - crop.top - crop.bottom }
+      : null;
+
+  const applyCrop = useCallback(async () => {
+    if (!crop || !imgSize || cropping) return;
+    setCropping(true);
+    try {
+      await onCrop({
+        x: crop.left,
+        y: crop.top,
+        width: imgSize.w - crop.left - crop.right,
+        height: imgSize.h - crop.top - crop.bottom,
+      });
+      // Anything left to redo was drawn in the old coordinates.
+      redoRef.current = {};
+      setCrop(null);
+      setSelectedIdx(null);
+    } catch (e) {
+      onError(String(e));
+    } finally {
+      setCropping(false);
+    }
+  }, [crop, imgSize, cropping, onCrop, onError]);
+
+  // While a crop is marked out, Enter confirms it and Esc drops it,
+  // ahead of the Editor's other shortcuts.
+  useEffect(() => {
+    if (!crop) return;
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement | null)?.tagName?.toLowerCase();
+      if (tag === "input" || tag === "textarea") return;
+      if (e.key === "Escape") {
+        e.stopImmediatePropagation();
+        if (!cropping) setCrop(null);
+      } else if (e.key === "Enter") {
+        e.stopImmediatePropagation();
+        void applyCrop();
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [crop, cropping, applyCrop]);
 
   // Right-click menu on the frame.
   const [frameMenu, setFrameMenu] = useState<{ x: number; y: number } | null>(null);
@@ -331,6 +471,13 @@ export default function Zoom({
       canvas.style.top = `${ir.top - sr.top}px`;
       canvas.style.right = "auto";
       canvas.style.bottom = "auto";
+      const layer = cropLayerRef.current;
+      if (layer) {
+        layer.style.width = canvas.style.width;
+        layer.style.height = canvas.style.height;
+        layer.style.left = canvas.style.left;
+        layer.style.top = canvas.style.top;
+      }
     };
     sync();
     const ro = new ResizeObserver(sync);
@@ -1152,7 +1299,7 @@ export default function Zoom({
               {frameEdits.length} edit{frameEdits.length > 1 ? "s" : ""}
             </span>
           )}
-          <button type="button" className="icon-btn" onClick={undo} disabled={frameEdits.length === 0} title="Undo last edit (Ctrl+Z)">
+          <button type="button" className="icon-btn" onClick={undo} disabled={frameEdits.length === 0 && !undoIsCrop} title={undoIsCrop ? "Undo crop (Ctrl+Z)" : "Undo last edit (Ctrl+Z)"}>
             <IconUndo size={18} />
           </button>
           <button type="button" className="icon-btn" onClick={redo} disabled={!canRedo} title="Redo (Ctrl+Y)">
@@ -1261,6 +1408,52 @@ export default function Zoom({
               }
             }}
           />
+          {/* Crop handles, one on each edge of the picture. */}
+          <div className="crop-layer" ref={cropLayerRef}>
+            {crop && imgSize && (
+              <div className="crop-layer__clip">
+                <div
+                  className="crop-layer__keep"
+                  style={{
+                    left: `${(crop.left / imgSize.w) * 100}%`,
+                    right: `${(crop.right / imgSize.w) * 100}%`,
+                    top: `${(crop.top / imgSize.h) * 100}%`,
+                    bottom: `${(crop.bottom / imgSize.h) * 100}%`,
+                  }}
+                />
+              </div>
+            )}
+            {imgSize &&
+              (["top", "bottom", "left", "right"] as const).map((edge) => {
+                const c = crop ?? NO_CROP;
+                const midX = ((c.left + (imgSize.w - c.left - c.right) / 2) / imgSize.w) * 100;
+                const midY = ((c.top + (imgSize.h - c.top - c.bottom) / 2) / imgSize.h) * 100;
+                const style: React.CSSProperties =
+                  edge === "top"
+                    ? { left: `${midX}%`, top: `${(c.top / imgSize.h) * 100}%` }
+                    : edge === "bottom"
+                      ? { left: `${midX}%`, top: `${(1 - c.bottom / imgSize.h) * 100}%` }
+                      : edge === "left"
+                        ? { top: `${midY}%`, left: `${(c.left / imgSize.w) * 100}%` }
+                        : { top: `${midY}%`, left: `${(1 - c.right / imgSize.w) * 100}%` };
+                return (
+                  <div
+                    key={edge}
+                    className={`crop-handle crop-handle--${edge}`}
+                    style={style}
+                    title={
+                      thumbs.length > 1
+                        ? "Drag to crop all frames"
+                        : "Drag to crop the picture"
+                    }
+                    onPointerDown={onCropHandleDown(edge)}
+                    onPointerMove={onCropHandleMove}
+                    onPointerUp={onCropHandleUp}
+                    onPointerCancel={onCropHandleUp}
+                  />
+                );
+              })}
+          </div>
           {editingTextIdx !== null &&
             (() => {
               const edit = frameEdits[editingTextIdx];
@@ -1310,6 +1503,32 @@ export default function Zoom({
       </div>
 
       {/* Frame bar: everything that acts on the whole frame. */}
+      {crop && cropSize && (
+        <div className="crop-bar" role="group" aria-label="Crop">
+          <span className="crop-bar__size">
+            {cropSize.w} × {cropSize.h} px
+          </span>
+          <button
+            type="button"
+            className="btn btn--sm btn--ghost"
+            onClick={() => setCrop(null)}
+            disabled={cropping}
+            title="Leave the frames as they are (Esc)"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="btn btn--sm btn--primary"
+            onClick={() => void applyCrop()}
+            disabled={cropping}
+            title="Cut every frame down to this area (Enter)"
+          >
+            {cropping ? "Cropping…" : thumbs.length > 1 ? "Crop all frames" : "Crop"}
+          </button>
+        </div>
+      )}
+
       <div className="zoom__controls">
         {/* Left cell is empty on purpose: it balances the actions on the
             right so the frame stepper stays centred. */}

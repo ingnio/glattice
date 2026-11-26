@@ -162,6 +162,13 @@ export const api = {
    *  it as a one-frame clip. Reports through `recording-ready` /
    *  `recording-error`, like `stopRecording`. */
   captureScreenshot: () => invoke<number>("capture_screenshot"),
+  /** Crop every frame of the loaded clip to one rectangle, in frame
+   *  pixels. The cropped clip arrives via `recording-ready`. */
+  cropFrames: (x: number, y: number, width: number, height: number) =>
+    invoke<number>("crop_frames", { x, y, width, height }),
+  /** Take back the most recent crop. The clip is the earlier source
+   *  again straight away; resolves with that source's id. */
+  undoCrop: () => invoke<number>("undo_crop"),
   /** How the scrolling screenshot in progress is going, or how the last
    *  one ended. */
   scrollCaptureStatus: () => invoke<ScrollStatus | null>("scroll_capture_status"),

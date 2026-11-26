@@ -36,7 +36,7 @@ import { encodeVideo, VideoFormat } from "./lib/encodeVideo";
 import { encodeGif } from "./lib/encodeGif";
 import { copyFrameToClipboard } from "./lib/copyFrame";
 import { applyTrim, remapTrim, TrimRange } from "./lib/trim";
-import { FrameEdits } from "./lib/edits";
+import { FrameEdits, shiftAllEdits } from "./lib/edits";
 import {
   addHistoryEntry,
   DEFAULT_PREFS,
@@ -56,6 +56,20 @@ import { IconGrid, IconHome, IconImage, IconMore, IconPlay, IconSteps } from "./
 type Source =
   | { kind: "recording"; info: RecordingInfo }
   | { kind: "gif"; info: GifInfo };
+
+/** One crop that can be undone. */
+interface CropStep {
+  /** Top-left corner of the crop in the frames before it. */
+  x: number;
+  y: number;
+  /** The source as it was before the crop. */
+  prev: Source;
+  /** How many edits each frame had when the crop was made. */
+  editCounts: Record<number, number>;
+}
+
+/** Matches CROP_UNDO_DEPTH in src-tauri/src/lib.rs. */
+const CROP_UNDO_DEPTH = 3;
 
 type View = "home" | "config" | "player" | "grid" | "zoom" | "steps";
 
@@ -169,6 +183,14 @@ export default function App() {
   // Initialised to [0, 1, 2, …] on load; drag-to-reorder updates it.
   const [frameOrder, setFrameOrder] = useState<number[]>([]);
   const [edits, setEdits] = useState<FrameEdits>({});
+  // Crops of the current clip that can still be undone, newest last.
+  const [cropStack, setCropStack] = useState<CropStep[]>([]);
+  const sourceRef = useRef<Source | null>(null);
+  sourceRef.current = source;
+  const editsRef = useRef<FrameEdits>({});
+  editsRef.current = edits;
+  const cropStackRef = useRef<CropStep[]>([]);
+  cropStackRef.current = cropStack;
   const [frameDelays, setFrameDelays] = useState<Record<number, number>>({});
   const [inputEvents, setInputEvents] = useState<InputEvent[]>([]);
   // The kept stretch of the clip, as positions in the displayed frame
@@ -480,6 +502,7 @@ export default function App() {
       setPlayerFrames(playerList);
       setFrameOrder(thumbList.map((t) => t.index));
       setEdits({});
+      setCropStack([]);
       setFrameDelays({});
       setPlayerPlaying(true);
       setPlayerLoop("loop");
@@ -1007,6 +1030,98 @@ export default function App() {
     },
     [overlayPrev, handleScreenshot, beginRecording],
   );
+
+  // ——— crop ———
+  // Cut every frame down to one rectangle. The backend swaps in the
+  // cropped clip as a new source; everything that belongs to the clip
+  // (edits, trim, order, holds) is kept, with edits moved to match.
+  const handleCrop = useCallback(
+    async (rect: { x: number; y: number; width: number; height: number }) => {
+      const ready = new Promise<RecordingInfo>((resolve, reject) => {
+        let r: (() => void) | null = null;
+        let e: (() => void) | null = null;
+        const clean = () => {
+          r?.();
+          e?.();
+        };
+        listen<RecordingInfo>("recording-ready", (event) => {
+          clean();
+          resolve(event.payload);
+        }).then((fn) => {
+          r = fn;
+        });
+        listen<{ message: string }>("recording-error", (event) => {
+          clean();
+          reject(new Error(event.payload.message));
+        }).then((fn) => {
+          e = fn;
+        });
+      });
+      // Remember what is needed to take this crop back.
+      const before = sourceRef.current;
+      const editCounts: Record<number, number> = {};
+      for (const [frame, list] of Object.entries(editsRef.current)) {
+        editCounts[Number(frame)] = list.length;
+      }
+      await api.cropFrames(rect.x, rect.y, rect.width, rect.height);
+      const info = await ready;
+      if (before) {
+        setCropStack((stack) =>
+          [...stack, { x: rect.x, y: rect.y, prev: before, editCounts }].slice(-CROP_UNDO_DEPTH),
+        );
+      }
+      const [thumbList, playerList] = await Promise.all([
+        api.listFrameThumbs(),
+        api.listPlayerFrames(),
+      ]);
+      setThumbs(thumbList);
+      setPlayerFrames(playerList);
+      setEdits((all) => shiftAllEdits(all, -rect.x, -rect.y));
+      setInputEvents(await api.listInputEvents().catch(() => []));
+      setSource((prev) => {
+        if (!prev) return prev;
+        const next = {
+          path: info.path,
+          width: info.width,
+          height: info.height,
+          sourceId: info.sourceId,
+        };
+        return prev.kind === "recording"
+          ? { kind: "recording", info: { ...prev.info, ...next, audioPath: info.audioPath } }
+          : { kind: "gif", info: { ...prev.info, ...next } };
+      });
+      notify(
+        `Cropped ${thumbList.length > 1 ? "all frames" : "the picture"} to ${info.width} × ${info.height}`,
+        { label: "Undo", run: () => handleUndoCropRef.current() },
+      );
+    },
+    [notify],
+  );
+
+  // Take the most recent crop back. The earlier frames are still on
+  // disk and in memory, so this is immediate.
+  const handleUndoCrop = useCallback(async () => {
+    const step = cropStackRef.current[cropStackRef.current.length - 1];
+    if (!step) return;
+    try {
+      await api.undoCrop();
+      const [thumbList, playerList] = await Promise.all([
+        api.listFrameThumbs(),
+        api.listPlayerFrames(),
+      ]);
+      setThumbs(thumbList);
+      setPlayerFrames(playerList);
+      setEdits((all) => shiftAllEdits(all, step.x, step.y));
+      setInputEvents(await api.listInputEvents().catch(() => []));
+      setSource(step.prev);
+      setCropStack((stack) => stack.slice(0, -1));
+      notify("Crop undone");
+    } catch (e) {
+      setError(String(e));
+    }
+  }, [notify]);
+  const handleUndoCropRef = useRef<() => void>(() => {});
+  handleUndoCropRef.current = () => void handleUndoCrop();
 
   // ——— scrolling screenshot ———
   // Capture a region while it is scrolled, joined into one tall picture.
@@ -1586,6 +1701,11 @@ export default function App() {
           onEditsChange={setEdits}
           onSimplifyChange={updateSimplify}
           exportPath={defaultExportPath(`${exportStem}-frame`)}
+          onCrop={handleCrop}
+          cropUndoCounts={
+            cropStack.length > 0 ? cropStack[cropStack.length - 1].editCounts : null
+          }
+          onUndoCrop={() => void handleUndoCrop()}
           onSaved={notifySaved}
           onError={setError}
           compactNavButton={compactNavButton}
