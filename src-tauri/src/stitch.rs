@@ -5,10 +5,14 @@
 //! moved, and the rows that came into view are added to the picture.
 //!
 //! Matching works on small fingerprints rather than pixels: every row is
-//! cut into `SEGMENTS` pieces and each piece is hashed. Comparing by
+//! cut into `SEGMENTS` pieces and each piece is summed up as two numbers,
+//! how bright it is and where along it the brightness sits. Comparing by
 //! piece means something that doesn't scroll with the page, such as a
 //! scrollbar thumb, a fixed side panel or a hover highlight, only spoils
-//! the pieces it touches instead of whole rows.
+//! the pieces it touches instead of whole rows. Comparing numbers with a
+//! little slack, rather than exact pixels, means a faint animation (a
+//! glow, a fading scrollbar, video noise) doesn't stop two views of the
+//! same content from being recognised as the same.
 
 use rayon::prelude::*;
 
@@ -31,41 +35,65 @@ const STILL_THRESHOLD: f32 = 0.9;
 /// on below a break.
 const LOST_BEFORE_GAP: u32 = 4;
 
+/// How far two pieces' numbers may differ and still count as the same,
+/// in brightness levels (0 to 255).
+const SAME_WITHIN: f32 = 1.5;
+/// A piece whose pixels all lie within this many levels of each other is
+/// blank: it says nothing about where the content is.
+const FLAT_WITHIN: u32 = 2;
+
 /// Per-row fingerprints of one capture.
 struct Sig {
     segs: usize,
-    /// `height * segs` hashes, row by row.
-    hash: Vec<u64>,
-    /// True where the piece is a single flat colour.
+    /// `height * segs` pieces, row by row: mean brightness, and mean
+    /// brightness weighted from -1 at the piece's left to +1 at its right.
+    feat: Vec<[f32; 2]>,
+    /// True where the piece is blank.
     flat: Vec<bool>,
+}
+
+impl Sig {
+    /// Whether piece `a` of this capture shows the same as piece `b` of
+    /// `other`.
+    #[inline]
+    fn same(&self, a: usize, other: &Sig, b: usize) -> bool {
+        let (x, y) = (self.feat[a], other.feat[b]);
+        (x[0] - y[0]).abs() <= SAME_WITHIN && (x[1] - y[1]).abs() <= SAME_WITHIN
+    }
 }
 
 fn signature(rgba: &[u8], width: usize, height: usize) -> Sig {
     let segs = SEGMENTS.min(width.max(1));
-    let mut hash = vec![0u64; height * segs];
+    let mut feat = vec![[0f32; 2]; height * segs];
     let mut flat = vec![true; height * segs];
-    hash.par_chunks_mut(segs)
+    feat.par_chunks_mut(segs)
         .zip(flat.par_chunks_mut(segs))
         .enumerate()
-        .for_each(|(y, (hrow, frow))| {
+        .for_each(|(y, (frow, flrow))| {
             let row = &rgba[y * width * 4..(y + 1) * width * 4];
             for s in 0..segs {
                 let a = s * width / segs;
                 let b = (s + 1) * width / segs;
-                let px = &row[a * 4..b * 4];
-                let first = u32::from_le_bytes([px[0], px[1], px[2], px[3]]);
-                let mut h: u64 = 0xcbf2_9ce4_8422_2325;
-                let mut all_same = true;
-                for c in px.chunks_exact(4) {
-                    let v = u32::from_le_bytes([c[0], c[1], c[2], c[3]]);
-                    all_same &= v == first;
-                    h = (h ^ v as u64).wrapping_mul(0x0000_0100_0000_01b3);
+                let n = (b - a) as i64;
+                let (mut sum, mut ramp) = (0i64, 0i64);
+                let (mut lo, mut hi) = (u32::MAX, 0u32);
+                for (i, c) in row[a * 4..b * 4].chunks_exact(4).enumerate() {
+                    // Brightness, weighted towards green like the eye.
+                    let v = (2 * c[0] as u32 + 5 * c[1] as u32 + c[2] as u32) / 8;
+                    lo = lo.min(v);
+                    hi = hi.max(v);
+                    sum += v as i64;
+                    // 2i - (n - 1) runs from -(n-1) to +(n-1) across the piece.
+                    ramp += v as i64 * (2 * i as i64 - (n - 1));
                 }
-                hrow[s] = h;
-                frow[s] = all_same;
+                frow[s] = [
+                    sum as f32 / n as f32,
+                    ramp as f32 / (n * n.max(2) - n) as f32 * 2.0,
+                ];
+                flrow[s] = hi - lo <= FLAT_WITHIN;
             }
         });
-    Sig { segs, hash, flat }
+    Sig { segs, feat, flat }
 }
 
 /// What a capture did to the picture.
@@ -200,9 +228,7 @@ impl Stitcher {
 
         let sig = signature(rgba, w, h);
         let segs = sig.segs;
-        let row_eq = |y: usize| {
-            prev_sig.hash[y * segs..(y + 1) * segs] == sig.hash[y * segs..(y + 1) * segs]
-        };
+        let row_eq = |y: usize| (0..segs).all(|s| sig.same(y * segs + s, prev_sig, y * segs + s));
         // Bands at the top and bottom that are the same in both captures:
         // a fixed header or footer, or just margin that looks alike.
         let t = (0..h).take_while(|&y| row_eq(y)).count();
@@ -246,12 +272,7 @@ impl Stitcher {
 
         // Nothing scrolled, but did the view stay the same otherwise?
         let total = (h * segs) as f32;
-        let same = prev_sig
-            .hash
-            .iter()
-            .zip(sig.hash.iter())
-            .filter(|(a, b)| a == b)
-            .count() as f32;
+        let same = (0..h * segs).filter(|&i| sig.same(i, prev_sig, i)).count() as f32;
         if same / total >= STILL_THRESHOLD {
             // Further down the page, only below the fixed band at the top:
             // writing a header here would stamp it into the middle of the
@@ -350,7 +371,7 @@ fn find_offset(prev: &Sig, cur: &Sig, lo: usize, hi: usize, h: usize) -> Option<
     let mut moving = vec![true; segs];
     for (s, m) in moving.iter_mut().enumerate() {
         let same = (lo..hi)
-            .filter(|&y| prev.hash[y * segs + s] == cur.hash[y * segs + s])
+            .filter(|&y| cur.same(y * segs + s, prev, y * segs + s))
             .count();
         if same as f32 >= 0.95 * span as f32 {
             *m = false;
@@ -378,7 +399,7 @@ fn find_offset(prev: &Sig, cur: &Sig, lo: usize, hi: usize, h: usize) -> Option<
                     continue;
                 }
                 informative += 1;
-                if cur.hash[c + s] == prev.hash[p + s] {
+                if cur.same(c + s, prev, p + s) {
                     matched += 1;
                 }
             }
@@ -541,6 +562,39 @@ mod tests {
             }
         }
         assert_eq!(st.height() as usize, scroll + H);
+    }
+
+    #[test]
+    fn a_faint_flicker_does_not_break_matching() {
+        // A glow down one edge whose brightness wobbles by a level from
+        // capture to capture, as an animated overlay or video noise would.
+        let doc = page(W, 1200);
+        let band = 45;
+        let shot = |scroll: usize, phase: u8| {
+            let mut v = view(&doc, W, scroll, H);
+            for y in 0..H {
+                for x in 0..band {
+                    let i = (y * W + x) * 4;
+                    let wobble = ((x as u8 / 7) + phase) % 2;
+                    for c in 0..3 {
+                        v[i + c] = v[i + c].saturating_sub(1).saturating_add(wobble);
+                    }
+                }
+            }
+            v
+        };
+        let mut st = Stitcher::new();
+        let mut scroll = 0;
+        for (n, step) in [0usize, 0, 54, 0, 109, 54, 0, 163, 40].into_iter().enumerate() {
+            scroll += step;
+            let s = st.push(&shot(scroll, n as u8), W as u32, H as u32);
+            if n > 0 {
+                let want = if step == 0 { Step::Still } else { Step::Moved(step as i32) };
+                assert_eq!(s, want, "capture {n}");
+            }
+        }
+        assert_eq!(st.height() as usize, scroll + H);
+        assert_eq!(st.gaps, 0);
     }
 
     #[test]

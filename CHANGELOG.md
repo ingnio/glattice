@@ -1,10 +1,11 @@
 # Changelog
 
-## [Unreleased]
+## [0.3.0] — 2026-11-26
 
 ### Scrolling screenshot
 - New **Scrolling screenshot** mode on the Record button's chevron: pick the area that scrolls, scroll it, and press **Done** to get one tall picture of everything that passed through
 - A header or footer that stays put while the page scrolls is kept once, at the top and bottom
+- Joining tolerates small changes on screen while you scroll, such as a fading scrollbar or a hover highlight
 - The strip shows how tall the picture has become; it opens in the editor, which shows tall pictures at full width and scrolls
 - Glattice says so if part of the page went by too fast to join up, or if the picture reached its size limit (20,000 pixels tall)
 

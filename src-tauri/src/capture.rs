@@ -203,7 +203,10 @@ impl CaptureState {
                 let mut rgba = img.into_raw();
 
                 if let (Some(st), Some(status)) = (stitcher.as_mut(), scroll_status.as_ref()) {
-                    st.push(&rgba, width, height);
+                    let step = st.push(&rgba, width, height);
+                    if step != crate::stitch::Step::Same {
+                        crate::dlog!("[scroll] {step:?} height={}", st.height());
+                    }
                     status.height.store(st.height(), Ordering::Relaxed);
                     status.gaps.store(st.gaps, Ordering::Relaxed);
                     status.truncated.store(st.truncated, Ordering::Relaxed);

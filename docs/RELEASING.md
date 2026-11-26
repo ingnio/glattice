@@ -9,8 +9,8 @@
 5. Tag the commit and push the tag:
 
    ```sh
-   git tag v0.2.0
-   git push origin v0.2.0
+   git tag v0.3.0
+   git push origin v0.3.0
    ```
 
 6. The Release workflow builds the Windows installers and attaches them to a **draft** GitHub release. Download the setup `.exe`, install it and try a recording and an export.
