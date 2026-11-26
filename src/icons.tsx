@@ -365,6 +365,17 @@ export const IconCamera = ({ size = defaults.size }: IconProps) =>
     </>,
   );
 
+/** A tall page with a downward arrow: scrolling screenshot. */
+export const IconScroll = ({ size = defaults.size }: IconProps) =>
+  svg(
+    size,
+    <>
+      <rect x="6" y="2.5" width="12" height="19" rx="2" />
+      <line x1="12" y1="7" x2="12" y2="16" />
+      <polyline points="8.5 12.5 12 16 15.5 12.5" />
+    </>,
+  );
+
 /** A numbered list: step-by-step guide. */
 export const IconSteps = ({ size = defaults.size }: IconProps) =>
   svg(

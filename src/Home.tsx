@@ -3,6 +3,7 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
   IconCamera,
+  IconScroll,
   IconChevron,
   IconCompact,
   IconConfig,
@@ -16,7 +17,7 @@ import logoUrl from "./assets/glattice-logo.png";
 import { convertFileSrc, RegionInput } from "./lib/tauri";
 import { HistoryEntry } from "./lib/prefs";
 
-export type CaptureMode = "record" | "screenshot";
+export type CaptureMode = "record" | "screenshot" | "scroll";
 
 interface Props {
   region: RegionInput | null;
@@ -29,6 +30,8 @@ interface Props {
   onRecord: () => void;
   /** Capture one still and open it in the Editor. */
   onScreenshot: () => void;
+  /** Capture a region while it is scrolled, joined into one tall picture. */
+  onScroll: () => void;
   /** What the main capture button does. Chosen from the chevron on
    *  that button; lasts until changed or the app is restarted. */
   captureMode: CaptureMode;
@@ -54,6 +57,7 @@ export default function Home({
   onRemoveHistory,
   onRecord,
   onScreenshot,
+  onScroll,
   captureMode,
   onCaptureModeChange,
   onSelectRegion,
@@ -198,6 +202,7 @@ export default function Home({
               mode={captureMode}
               onRecord={onRecord}
               onScreenshot={onScreenshot}
+              onScroll={onScroll}
               disabled={supported === false}
               region
               menuOpen={modeMenuOpen}
@@ -230,6 +235,7 @@ export default function Home({
                 mode={captureMode}
                 onRecord={onRecord}
                 onScreenshot={onScreenshot}
+                onScroll={onScroll}
                 disabled={supported === false}
                 menuOpen={modeMenuOpen}
                 onMenuToggle={() => setModeMenuOpen((o) => !o)}
@@ -245,7 +251,11 @@ export default function Home({
                 </div>
                 <div className="action-card__title">Select region</div>
                 <div className="action-card__subtitle">
-                  {captureMode === "screenshot" ? "Snap just an area" : "Record just an area"}
+                  {captureMode === "screenshot"
+                    ? "Snap just an area"
+                    : captureMode === "scroll"
+                      ? "Pick the area that scrolls"
+                      : "Record just an area"}
                 </div>
               </button>
             </div>
@@ -255,7 +265,9 @@ export default function Home({
               <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd>{" "}
               {captureMode === "screenshot"
                 ? "takes a screenshot from anywhere"
-                : "starts and stops recording from anywhere"}
+                : captureMode === "scroll"
+                  ? "starts and finishes a scrolling screenshot"
+                  : "starts and stops recording from anywhere"}
             </p>
 
             <div className="home2__or">
@@ -331,6 +343,7 @@ export default function Home({
 const MODES: { mode: CaptureMode; label: string; hint: string }[] = [
   { mode: "record", label: "Record", hint: "Capture a GIF or video" },
   { mode: "screenshot", label: "Screenshot", hint: "One picture to mark up" },
+  { mode: "scroll", label: "Scrolling screenshot", hint: "Scroll while it captures a tall picture" },
 ];
 
 /** The main capture button, split in two: the large part does the
@@ -341,6 +354,7 @@ function CaptureButton({
   mode,
   onRecord,
   onScreenshot,
+  onScroll,
   disabled,
   region = false,
   menuOpen,
@@ -349,36 +363,46 @@ function CaptureButton({
   mode: CaptureMode;
   onRecord: () => void;
   onScreenshot: () => void;
+  onScroll: () => void;
   disabled: boolean;
   region?: boolean;
   menuOpen: boolean;
   onMenuToggle: () => void;
 }) {
-  const shot = mode === "screenshot";
-
-  const title = shot
-    ? region
-      ? "Screenshot region"
-      : "Screenshot"
-    : region
-      ? "Record region"
-      : "Record";
+  const title =
+    mode === "screenshot"
+      ? region
+        ? "Screenshot region"
+        : "Screenshot"
+      : mode === "scroll"
+        ? "Scrolling screenshot"
+        : region
+          ? "Record region"
+          : "Record";
   const subtitle = region
     ? "Ctrl+Shift+R"
-    : shot
+    : mode === "screenshot"
       ? "One picture to mark up"
-      : "Capture a new GIF";
-  const tooltip = shot
-    ? `Take one picture of ${region ? "this region" : "the screen"} and open it to mark up (Ctrl+Shift+R)`
-    : `Record ${region ? "this region" : "the full screen"} (Ctrl+Shift+R)`;
-  const Icon = shot ? IconCamera : IconRecord;
+      : mode === "scroll"
+        ? "One tall picture"
+        : "Capture a new GIF";
+  const tooltip =
+    mode === "screenshot"
+      ? `Take one picture of ${region ? "this region" : "the screen"} and open it to mark up (Ctrl+Shift+R)`
+      : mode === "scroll"
+        ? region
+          ? "Scroll this region while it is captured; the result is one tall picture (Ctrl+Shift+R)"
+          : "Pick the area that scrolls, then scroll it; the result is one tall picture (Ctrl+Shift+R)"
+        : `Record ${region ? "this region" : "the full screen"} (Ctrl+Shift+R)`;
+  const Icon = mode === "screenshot" ? IconCamera : mode === "scroll" ? IconScroll : IconRecord;
+  const onClick = mode === "screenshot" ? onScreenshot : mode === "scroll" ? onScroll : onRecord;
 
   return (
     <div className={`action-split ${region ? "action-split--region" : ""}`}>
       <button
         type="button"
         className={`action-card action-card--primary ${region ? "action-card--ready home2__region-record" : ""}`}
-        onClick={shot ? onScreenshot : onRecord}
+        onClick={onClick}
         disabled={disabled}
         title={tooltip}
       >
@@ -451,7 +475,13 @@ function CaptureModeMenu({
             onClick={() => onPick(m.mode)}
           >
             <span className="action-split__item-icon">
-              {m.mode === "screenshot" ? <IconCamera size={16} /> : <IconRecord size={16} />}
+              {m.mode === "screenshot" ? (
+                <IconCamera size={16} />
+              ) : m.mode === "scroll" ? (
+                <IconScroll size={16} />
+              ) : (
+                <IconRecord size={16} />
+              )}
             </span>
             <span className="action-split__item-text">
               <span className="action-split__item-label">{m.label}</span>

@@ -29,6 +29,7 @@ import {
   PrevWindow,
   RecordingInfo,
   RegionInput,
+  ScrollStatus,
 } from "./lib/tauri";
 
 import { encodeVideo, VideoFormat } from "./lib/encodeVideo";
@@ -60,6 +61,9 @@ type View = "home" | "config" | "player" | "grid" | "zoom" | "steps";
 
 /** Content size of the window while it is the recording strip. */
 const STRIP_SIZE: [number, number] = [380, 56];
+/** Captures a second while taking a scrolling screenshot: often enough
+ *  that consecutive captures overlap even when scrolling briskly. */
+const SCROLL_FPS = 15;
 
 /** `2026-11-23-210733` in local time, for default export file names. */
 function fileStamp(ms: number): string {
@@ -120,6 +124,18 @@ export default function App() {
   const [captureMode, setCaptureMode] = useState<CaptureMode>("record");
   const captureModeRef = useRef<CaptureMode>("record");
   captureModeRef.current = captureMode;
+  // True while the take in progress is a scrolling screenshot rather
+  // than a recording, and how that picture is coming along.
+  const [scrollCapture, setScrollCapture] = useState(false);
+  const scrollCaptureRef = useRef(false);
+  scrollCaptureRef.current = scrollCapture;
+  const [scrollStatus, setScrollStatus] = useState<ScrollStatus>({
+    height: 0,
+    gaps: 0,
+    truncated: false,
+  });
+  // Set once handleScroll exists, so the hotkey listener can reach it.
+  const handleScrollRef = useRef<() => void>(() => {});
   // The step-by-step guide for the loaded clip, once its Steps tab has
   // been opened. Kept here so captions survive moving between tabs.
   const [guide, setGuide] = useState<Guide | null>(null);
@@ -570,8 +586,15 @@ export default function App() {
   // another one on top of it.
   const startingRef = useRef(false);
 
-  const beginRecording = useCallback(async () => {
+  const beginRecording = useCallback(async (
+    /** Take a scrolling screenshot instead of a recording. */
+    scroll: boolean = false,
+    /** The region to capture, when it was only just picked and the
+     *  state hasn't caught up yet. */
+    regionNow?: RegionInput,
+  ) => {
     if (startingRef.current) return;
+    const activeRegion = regionNow ?? region;
     startingRef.current = true;
     setError(null);
     if (countdownShownRef.current) {
@@ -587,13 +610,21 @@ export default function App() {
     await win.setContentProtected(true).catch(() => {});
     await new Promise((r) => setTimeout(r, 100));
     try {
-      await api.startRecording(
-        prefs.fps,
-        prefs.cursorMode,
-        prefs.recordClicks,
-        prefs.recordKeys,
-        prefs.recordAudio,
-      );
+      if (scroll) {
+        // No cursor, clicks, keys or sound: they would only get in the
+        // way of joining the captures into one picture.
+        await api.startRecording(SCROLL_FPS, "off", false, false, false, true);
+        setScrollStatus({ height: 0, gaps: 0, truncated: false });
+      } else {
+        await api.startRecording(
+          prefs.fps,
+          prefs.cursorMode,
+          prefs.recordClicks,
+          prefs.recordKeys,
+          prefs.recordAudio,
+        );
+      }
+      setScrollCapture(scroll);
       setIsRecording(true);
       setRecordStart(Date.now());
       setElapsedMs(0);
@@ -602,8 +633,8 @@ export default function App() {
       // (or an error) is shown.
       setView("home");
       setCompactNavOpen(false);
-      if (region) {
-        api.showRecordingIndicator(region).catch(() => {});
+      if (activeRegion) {
+        api.showRecordingIndicator(activeRegion).catch(() => {});
       }
     } catch (e) {
       await win.setContentProtected(false).catch(() => {});
@@ -625,7 +656,7 @@ export default function App() {
     setError(null);
     const seconds = Math.max(0, Math.floor(prefs.countdownSeconds || 0));
     if (seconds <= 0) {
-      void beginRecording();
+      void beginRecording(false);
       return;
     }
     setCountdown(seconds);
@@ -650,7 +681,7 @@ export default function App() {
     if (countdown === null) return;
     if (countdown <= 0) {
       setCountdown(null);
-      void beginRecording();
+      void beginRecording(false);
       return;
     }
     countdownShownRef.current = true;
@@ -761,21 +792,28 @@ export default function App() {
     // wasn't compiled with it, fall back to the standard encoder even
     // when the user's saved pref still has the toggle on — otherwise
     // Rust will reject the request with InvalidConfig.
-    const useHighQuality = prefs.highQuality && highQualityAvailable;
-    setBusy(useHighQuality ? "Encoding GIF (high quality)…" : "Encoding GIF…");
+    const scroll = scrollCaptureRef.current;
+    const useHighQuality = !scroll && prefs.highQuality && highQualityAvailable;
+    setBusy(
+      scroll
+        ? "Putting the picture together…"
+        : useHighQuality
+          ? "Encoding GIF (high quality)…"
+          : "Encoding GIF…",
+    );
 
     const unlistenProgress = await listen<{ done: number; total: number }>(
       "encode-progress",
       (event) => {
         const { done, total } = event.payload;
-        setBusy(`Encoding GIF… ${done}/${total}`);
+        if (!scroll) setBusy(`Encoding GIF… ${done}/${total}`);
       },
     );
     const unlistenThumb = await listen<{ done: number; total: number }>(
       "thumb-progress",
       (event) => {
         const { done, total } = event.payload;
-        setBusy(`Generating thumbnails… ${done}/${total}`);
+        if (!scroll) setBusy(`Generating thumbnails… ${done}/${total}`);
       },
     );
 
@@ -820,7 +858,25 @@ export default function App() {
         fps: info.fps,
         fromRecording: true,
       }).then(setHistory).catch(() => {});
-      setView("player");
+      if (scroll) {
+        // One picture: straight to the Editor, like a screenshot.
+        setZoomIndex(thumbList[0]?.index ?? 0);
+        setCompactNavOpen(false);
+        setView("zoom");
+        // The region was for this one picture; don't leave it armed.
+        await api.clearRegion().catch(() => {});
+        setRegion(null);
+        const status = await api.scrollCaptureStatus().catch(() => null);
+        if (status?.truncated) {
+          notify("The picture reached its size limit, so it stops early");
+        } else if (status && status.gaps > 0) {
+          notify(
+            "Some of the page was scrolled past too quickly to join up. Check the picture for a break.",
+          );
+        }
+      } else {
+        setView("player");
+      }
     } catch (e) {
       setError(String(e));
       setIsRecording(false);
@@ -829,8 +885,9 @@ export default function App() {
       unlistenProgress();
       unlistenThumb();
       setBusy(null);
+      setScrollCapture(false);
     }
-  }, [prefs.highQuality, highQualityAvailable, loadThumbs]);
+  }, [prefs.highQuality, highQualityAvailable, loadThumbs, notify]);
 
   // ——— discard recording ———
   // Stop capturing and throw the take away: nothing is encoded and
@@ -840,12 +897,13 @@ export default function App() {
     await getCurrentWindow().setContentProtected(false).catch(() => {});
     try {
       await api.discardRecording();
-      notify("Recording discarded");
+      notify(scrollCaptureRef.current ? "Screenshot discarded" : "Recording discarded");
     } catch (e) {
       setError(String(e));
     } finally {
       setIsRecording(false);
       setRecordStart(null);
+      setScrollCapture(false);
     }
   }, [notify]);
 
@@ -857,6 +915,7 @@ export default function App() {
       else if (isRecordingRef.current) handleStop();
       // The hotkey does whatever Home's capture button is set to.
       else if (captureModeRef.current === "screenshot") handleScreenshot();
+      else if (captureModeRef.current === "scroll") handleScrollRef.current();
       else handleRecord();
     });
     return () => {
@@ -917,6 +976,9 @@ export default function App() {
       // it and go straight to the Editor, rather than coming back to Home
       // to press another button.
       const snapNow = picked !== null && captureModeRef.current === "screenshot";
+      // Likewise in Scrolling screenshot mode: capturing starts as soon as
+      // the area is drawn, and the strip takes over from there.
+      const scrollNow = picked !== null && captureModeRef.current === "scroll";
       try {
         await api.leaveRegionOverlay(prev);
         if (picked) {
@@ -938,9 +1000,44 @@ export default function App() {
         await api.clearRegion().catch(() => {});
         setRegion(null);
       }
+      if (scrollNow && picked) {
+        await new Promise((r) => setTimeout(r, 250));
+        await beginRecording(true, picked);
+      }
     },
-    [overlayPrev, handleScreenshot],
+    [overlayPrev, handleScreenshot, beginRecording],
   );
+
+  // ——— scrolling screenshot ———
+  // Capture a region while it is scrolled, joined into one tall picture.
+  // It needs an area to watch, so without one this asks for it first and
+  // starts as soon as it is drawn.
+  const handleScroll = useCallback(() => {
+    if (startingRef.current || isRecordingRef.current) return;
+    setError(null);
+    if (region) void beginRecording(true);
+    else void handleSelectRegion();
+  }, [region, beginRecording, handleSelectRegion]);
+  handleScrollRef.current = handleScroll;
+
+  // While one is being taken, keep the strip's height readout current.
+  useEffect(() => {
+    if (!isRecording || !scrollCapture) return;
+    let live = true;
+    const tick = () => {
+      api
+        .scrollCaptureStatus()
+        .then((st) => {
+          if (live && st) setScrollStatus(st);
+        })
+        .catch(() => {});
+    };
+    const handle = window.setInterval(tick, 300);
+    return () => {
+      live = false;
+      window.clearInterval(handle);
+    };
+  }, [isRecording, scrollCapture]);
 
   // ——— ordered thumb views ———
   // Apply frameOrder permutation so every consumer sees frames in the
@@ -1291,6 +1388,7 @@ export default function App() {
           elapsedMs={elapsedMs}
           fps={prefs.fps}
           region={region}
+          scroll={scrollCapture ? scrollStatus : null}
           onStop={handleStop}
           onDiscard={handleDiscard}
         />
@@ -1382,6 +1480,7 @@ export default function App() {
           }
           onRecord={handleRecord}
           onScreenshot={handleScreenshot}
+          onScroll={handleScroll}
           captureMode={captureMode}
           onCaptureModeChange={setCaptureMode}
           onSelectRegion={handleSelectRegion}

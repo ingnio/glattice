@@ -1,7 +1,7 @@
 use parking_lot::Mutex;
 use std::{
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU32, Ordering},
         Arc,
     },
     thread::JoinHandle,
@@ -72,6 +72,18 @@ pub enum CursorMode {
     Overlay,
 }
 
+/// Progress of a scrolling screenshot, shared with the capture thread so
+/// the strip can show how tall the picture has become.
+#[derive(Default)]
+pub struct ScrollStatus {
+    pub height: AtomicU32,
+    /// Places where the picture carries on below a break because the
+    /// captures either side had nothing in common.
+    pub gaps: AtomicU32,
+    /// True once the picture reached its size limit.
+    pub truncated: AtomicBool,
+}
+
 struct Session {
     stop_flag: Arc<AtomicBool>,
     thread: JoinHandle<AppResult<Vec<CapturedFrame>>>,
@@ -84,6 +96,8 @@ struct Session {
 #[derive(Default)]
 pub struct CaptureState {
     session: Mutex<Option<Session>>,
+    /// Status of the scrolling screenshot in progress, or of the last one.
+    scroll: Mutex<Option<Arc<ScrollStatus>>>,
 }
 
 impl CaptureState {
@@ -100,6 +114,7 @@ impl CaptureState {
         record_clicks: bool,
         record_keys: bool,
         record_audio: bool,
+        scroll: bool,
     ) -> AppResult<()> {
         if fps == 0 || fps > 60 {
             return Err(AppError::InvalidConfig(format!(
@@ -156,9 +171,15 @@ impl CaptureState {
             None
         };
 
+        // A scrolling screenshot joins the captures into one tall picture
+        // as it goes, instead of keeping them as frames.
+        let scroll_status = scroll.then(|| Arc::new(ScrollStatus::default()));
+        *self.scroll.lock() = scroll_status.clone();
+
         let thread = std::thread::spawn(move || -> AppResult<Vec<CapturedFrame>> {
             let monitor = pick_monitor(monitor_index)?;
             let mut frames: Vec<CapturedFrame> = Vec::new();
+            let mut stitcher = scroll_status.as_ref().map(|_| crate::stitch::Stitcher::new());
             let start = session_start;
             let mut next_tick = Instant::now();
 
@@ -180,6 +201,22 @@ impl CaptureState {
                 let width = img.width();
                 let height = img.height();
                 let mut rgba = img.into_raw();
+
+                if let (Some(st), Some(status)) = (stitcher.as_mut(), scroll_status.as_ref()) {
+                    st.push(&rgba, width, height);
+                    status.height.store(st.height(), Ordering::Relaxed);
+                    status.gaps.store(st.gaps, Ordering::Relaxed);
+                    status.truncated.store(st.truncated, Ordering::Relaxed);
+                    next_tick += interval;
+                    // Joining can take longer than the interval on a big
+                    // region; don't then fire a burst to catch up.
+                    let now = Instant::now();
+                    if next_tick < now {
+                        next_tick = now;
+                    }
+                    park_until(next_tick, &stop_flag_thread);
+                    continue;
+                }
 
                 let mut cursor_pos: Option<(i32, i32)> = None;
                 if cursor_mode != CursorMode::Off {
@@ -222,6 +259,20 @@ impl CaptureState {
 
                 next_tick += interval;
                 park_until(next_tick, &stop_flag_thread);
+            }
+
+            if let (Some(st), Some(status)) = (stitcher, scroll_status.as_ref()) {
+                let (rgba, width, height) = st.finish();
+                status.height.store(height, Ordering::Relaxed);
+                if width > 0 && height > 0 {
+                    frames.push(CapturedFrame {
+                        width,
+                        height,
+                        rgba,
+                        elapsed_ms: 0,
+                        cursor: None,
+                    });
+                }
             }
 
             Ok(frames)
@@ -285,6 +336,12 @@ impl CaptureState {
 
     pub fn is_recording(&self) -> bool {
         self.session.lock().is_some()
+    }
+
+    /// Status of the scrolling screenshot in progress, or of the last one
+    /// taken. `None` if there hasn't been one.
+    pub fn scroll_status(&self) -> Option<Arc<ScrollStatus>> {
+        self.scroll.lock().clone()
     }
 }
 

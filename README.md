@@ -27,7 +27,7 @@ Everything stays on your computer: Glattice makes no network connections and col
 ## What you can do with it
 
 - **Record a GIF or video** of the whole screen or a region, with click rings, key presses and the cursor shown.
-- **Take a screenshot** and mark it up straight away with arrows, text, blur and numbered steps.
+- **Take a screenshot**, or a scrolling screenshot of a whole page, and mark it up straight away with arrows, text, blur and numbered steps.
 - **Edit any frame**: annotate, redact, reorder, trim, or hold a frame on screen longer.
 - **Turn a recording into a guide**: one numbered close-up per click, with captions, exported as an image, a web page or Markdown.
 - **Export** as GIF, MP4, WebM, a sprite sheet, or a single frame, or copy a frame to the clipboard.
@@ -58,9 +58,10 @@ To build it yourself instead, see [Building](#building).
 - **Global hotkey** — `Ctrl+Shift+R` starts and stops a recording from anywhere
 
 ### Screenshots
-- **One button, two modes** — the chevron on the Record button switches it between **Record** and **Screenshot**; the choice lasts until you change it or restart
+- **One button, three modes** — the chevron on the Record button switches it between **Record**, **Screenshot** and **Scrolling screenshot**; the choice lasts until you change it or restart
 - **Whole screen or a region** — in Screenshot mode, drawing a region takes the picture immediately
 - **Straight to the editor** — a screenshot opens ready to mark up, copy or export; Glattice keeps itself out of the picture
+- **Scrolling screenshot** — pick the area that scrolls, scroll through it, and press **Done**: everything that passed through is joined into one tall picture, with a fixed header or footer kept once
 - **Same hotkey** — `Ctrl+Shift+R` does whichever the button is set to
 
 ### Editing

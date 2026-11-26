@@ -122,6 +122,15 @@ export interface MonitorInfo {
   isSelected: boolean;
 }
 
+export interface ScrollStatus {
+  /** Height of the joined picture so far, in pixels. */
+  height: number;
+  /** Places where it carries on below a break. */
+  gaps: number;
+  /** True once it reached its size limit. */
+  truncated: boolean;
+}
+
 export const api = {
   platformCheck: () => invoke<PlatformStatus>("platform_check"),
   isRecording: () => invoke<boolean>("is_recording"),
@@ -131,6 +140,8 @@ export const api = {
     recordClicks: boolean,
     recordKeys: boolean,
     recordAudio: boolean,
+    /** Join the captures into one tall picture instead of keeping frames. */
+    scroll = false,
   ) =>
     invoke<void>("start_recording", {
       fps,
@@ -138,6 +149,7 @@ export const api = {
       recordClicks,
       recordKeys,
       recordAudio,
+      scroll,
     }),
   listInputEvents: () => invoke<InputEvent[]>("list_input_events"),
   startFileDrag: (path: string) =>
@@ -150,6 +162,9 @@ export const api = {
    *  it as a one-frame clip. Reports through `recording-ready` /
    *  `recording-error`, like `stopRecording`. */
   captureScreenshot: () => invoke<number>("capture_screenshot"),
+  /** How the scrolling screenshot in progress is going, or how the last
+   *  one ended. */
+  scrollCaptureStatus: () => invoke<ScrollStatus | null>("scroll_capture_status"),
   /** Shrink the main window into the small always-on-top recording
    *  strip (`active`, with its content size in logical px), or give it
    *  back its normal constraints. */

@@ -10,6 +10,7 @@ mod input;
 mod overlays;
 mod rect_detect;
 mod sprite;
+mod stitch;
 mod thumbs;
 
 use std::{
@@ -387,9 +388,11 @@ fn start_recording(
     record_clicks: Option<bool>,
     record_keys: Option<bool>,
     record_audio: Option<bool>,
+    scroll: Option<bool>,
     state: State<'_, AppState>,
 ) -> AppResult<()> {
     let t0 = std::time::Instant::now();
+    let scroll = scroll.unwrap_or(false);
     let region = *state.region.lock();
     if region.is_none() {
         if let Ok(Some(idx)) = capture::cursor_monitor() {
@@ -406,7 +409,7 @@ fn start_recording(
     let record_keys = record_keys.unwrap_or(false);
     let record_audio = record_audio.unwrap_or(false);
     dlog!(
-        "[start_recording] fps={fps} region={region:?} cursor={mode:?} monitor={monitor_index:?} clicks={record_clicks} keys={record_keys} audio={record_audio}"
+        "[start_recording] fps={fps} region={region:?} cursor={mode:?} monitor={monitor_index:?} clicks={record_clicks} keys={record_keys} audio={record_audio} scroll={scroll}"
     );
     *state.last_fps.lock() = fps;
     let result = state.capture.start(
@@ -417,9 +420,33 @@ fn start_recording(
         record_clicks,
         record_keys,
         record_audio,
+        scroll,
     );
     dlog!("[start_recording] returned in {:?} ok={}", t0.elapsed(), result.is_ok());
     result
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ScrollStatusInfo {
+    /// Height of the joined picture so far, in pixels.
+    height: u32,
+    /// Places where it carries on below a break.
+    gaps: u32,
+    /// True once it reached its size limit.
+    truncated: bool,
+}
+
+/// How the scrolling screenshot in progress is going, or how the last
+/// one ended. `None` if there hasn't been one.
+#[tauri::command]
+fn scroll_capture_status(state: State<'_, AppState>) -> Option<ScrollStatusInfo> {
+    use std::sync::atomic::Ordering;
+    state.capture.scroll_status().map(|s| ScrollStatusInfo {
+        height: s.height.load(Ordering::Relaxed),
+        gaps: s.gaps.load(Ordering::Relaxed),
+        truncated: s.truncated.load(Ordering::Relaxed),
+    })
 }
 
 /// Return all input events captured during the current recording. Used
@@ -2018,6 +2045,7 @@ pub fn run() {
             stop_recording,
             discard_recording,
             capture_screenshot,
+            scroll_capture_status,
             set_recording_strip,
             reveal_in_folder,
             load_gif,

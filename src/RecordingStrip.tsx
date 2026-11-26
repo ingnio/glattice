@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
 import { IconStop } from "./icons";
-import { RegionInput } from "./lib/tauri";
+import { RegionInput, ScrollStatus } from "./lib/tauri";
 
 interface Props {
   elapsedMs: number;
   fps: number;
   region: RegionInput | null;
+  /** Set while a scrolling screenshot is being taken: the strip then
+   *  shows how tall the picture has become instead of a timer. */
+  scroll?: ScrollStatus | null;
   onStop: () => void;
   onDiscard: () => void;
 }
@@ -27,6 +30,7 @@ export default function RecordingStrip({
   elapsedMs,
   fps,
   region,
+  scroll = null,
   onStop,
   onDiscard,
 }: Props) {
@@ -45,18 +49,53 @@ export default function RecordingStrip({
 
   if (confirming) {
     return (
-      <div className="rec-strip" role="group" aria-label="Discard recording">
-        <span className="rec-strip__ask">Discard this recording?</span>
+      <div className="rec-strip" role="group" aria-label="Discard">
+        <span className="rec-strip__ask">
+          {scroll ? "Discard this screenshot?" : "Discard this recording?"}
+        </span>
         <button
           type="button"
           className="btn btn--sm"
           onClick={() => setConfirming(false)}
           autoFocus
         >
-          Keep recording
+          {scroll ? "Keep going" : "Keep recording"}
         </button>
         <button type="button" className="btn btn--sm btn--danger" onClick={onDiscard}>
           Discard
+        </button>
+      </div>
+    );
+  }
+
+  if (scroll) {
+    return (
+      <div className="rec-strip" role="group" aria-label="Scrolling screenshot">
+        <span className="rec-strip__dot" aria-hidden="true" />
+        <span className="rec-strip__time">Scroll the page</span>
+        <span className="rec-strip__meta muted" role="status">
+          {scroll.truncated
+            ? "Size limit reached"
+            : scroll.height > 0
+              ? `${scroll.height.toLocaleString()} px tall`
+              : "Starting…"}
+        </span>
+        <span className="rec-strip__spacer" />
+        <button
+          type="button"
+          className="btn btn--sm btn--ghost"
+          onClick={() => setConfirming(true)}
+          title="Throw this screenshot away"
+        >
+          Discard
+        </button>
+        <button
+          type="button"
+          className="btn btn--sm btn--primary"
+          onClick={onStop}
+          title="Finish and open the picture (Ctrl+Shift+R)"
+        >
+          Done
         </button>
       </div>
     );

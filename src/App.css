@@ -3344,6 +3344,20 @@ body {
   object-fit: contain;
 }
 
+/* A very tall picture: fit its width and scroll down through it. */
+.zoom__stage--tall {
+  align-items: flex-start;
+}
+
+.zoom__stage--tall .editor-surface {
+  height: auto;
+  align-items: flex-start;
+}
+
+.zoom__stage--tall .zoom__img {
+  max-height: none;
+}
+
 /* ——— per-frame editor ———————————————————————————————————————————— */
 
 /* editor-bar no longer renders as a standalone element;

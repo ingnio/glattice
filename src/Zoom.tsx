@@ -126,6 +126,10 @@ export default function Zoom({
   } | null>(null);
   const [editingTextIdx, setEditingTextIdx] = useState<number | null>(null);
 
+  // A picture much taller than it is wide (a scrolling screenshot) is
+  // shown at its full width and scrolled, rather than shrunk until its
+  // whole height fits and nothing in it can be read.
+  const tall = imgSize !== null && imgSize.h > imgSize.w * 2;
   const imgRef = useRef<HTMLImageElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const surfaceRef = useRef<HTMLDivElement | null>(null);
@@ -1212,7 +1216,7 @@ export default function Zoom({
       </div>
 
       <div
-        className="zoom__stage"
+        className={`zoom__stage ${tall ? "zoom__stage--tall" : ""}`}
         ref={stageRef}
         onContextMenu={(e) => {
           e.preventDefault();
