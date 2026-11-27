@@ -9,6 +9,10 @@ A lightweight screen recorder and screenshot tool for bug reports, how-tos and t
 Built with [Tauri v2](https://tauri.app), React 19, and Rust. Runs on Windows 10 and 11.
 
 <p align="center">
+  <img src="docs/demo/glattice-demo.gif" alt="An animated walk-through of Glattice: recording a region, trimming and editing frames, turning clicks into a step-by-step guide, taking and annotating a screenshot, capturing a scrolling page, and exporting" width="720" />
+</p>
+
+<p align="center">
   <img src="docs/screenshots/editor.png" alt="The frame editor with numbered step markers and a blurred email address on a frame" width="720" />
 </p>
 
